@@ -37,10 +37,12 @@ export const createRenderWindow = (
 ): VtkGenericRenderWindow => {
   const generic = vtkGenericRenderWindow.newInstance({
     background,
-    container,
     listenWindowResize: false,
   });
 
+  // Must call setContainer explicitly — newInstance stores it in model
+  // but does NOT attach the OpenGL canvas to the DOM.
+  generic.setContainer(container);
   generic.getInteractor().setInteractorStyle(vtkInteractorStyleTrackballCamera.newInstance());
   generic.resize();
   return generic;
