@@ -1,0 +1,56 @@
+=== Console Messages ===
+[debug] [vite] connecting...
+[debug] [vite] connected.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[error] No input!
+[error] No input!
+[error] No input!
+[error] No input!
+[warning] %s
+
+%s
+ An error occurred in the <Scene3DPane> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+[warning] %s
+
+%s
+ An error occurred in the <PseudoTeePane> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+[warning] %s
+
+%s
+ An error occurred in the <Scene3DPane> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+[warning] %s
+
+%s
+ An error occurred in the <ObliqueSlicePane> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+[warning] %s
+
+%s
+ An error occurred in the <PseudoTeePane> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+[warning] %s
+
+%s
+ An error occurred in the <ObliqueSlicePane> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+[warning] [.WebGL-0x114001d0e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[warning] [.WebGL-0x114001d0e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[warning] [.WebGL-0x114001d0e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[warning] [.WebGL-0x114001d0e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+
+=== Page Errors ===
+renderWindow.getInteractor(...).onEndInteractionEvent is not a function
+Cannot read properties of null (reading 'releaseGraphicsResources')
+renderWindow.getInteractor(...).onEndInteractionEvent is not a function
+Cannot read properties of null (reading 'releaseGraphicsResources')
+Cannot read properties of null (reading 'releaseGraphicsResources')
+Cannot read properties of null (reading 'releaseGraphicsResources')
+
+=== DOM Snapshot ===
+{
+  "rootChildCount": 0,
+  "rootHTML": ""
+}

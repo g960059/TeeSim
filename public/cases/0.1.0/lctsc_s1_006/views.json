@@ -1,0 +1,203 @@
+[
+  {
+    "id": "me-4c",
+    "label": "ME Four-Chamber",
+    "aseCode": "ME_4C",
+    "station": "ME",
+    "probePose": {
+      "sMm": 97,
+      "rollDeg": 0,
+      "anteDeg": -5,
+      "lateralDeg": 0,
+      "omniplaneDeg": 0
+    },
+    "targetStructures": [
+      "heart",
+      "esophagus"
+    ],
+    "tolerance": {
+      "sMm": 15,
+      "angleDeg": 12
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "me-2c",
+    "label": "ME Two-Chamber",
+    "aseCode": "ME_2C",
+    "station": "ME",
+    "probePose": {
+      "sMm": 97,
+      "rollDeg": 0,
+      "anteDeg": -5,
+      "lateralDeg": 0,
+      "omniplaneDeg": 65
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 15,
+      "angleDeg": 12
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "me-lax",
+    "label": "ME Long-Axis",
+    "aseCode": "ME_LAX",
+    "station": "ME",
+    "probePose": {
+      "sMm": 97,
+      "rollDeg": 0,
+      "anteDeg": -5,
+      "lateralDeg": 0,
+      "omniplaneDeg": 130
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 15,
+      "angleDeg": 15
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "tg-mid-sax",
+    "label": "TG Mid Short-Axis",
+    "aseCode": "TG_MID_SAX",
+    "station": "TG",
+    "probePose": {
+      "sMm": 166,
+      "rollDeg": 0,
+      "anteDeg": 20,
+      "lateralDeg": 0,
+      "omniplaneDeg": 10
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 20,
+      "angleDeg": 15
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "me-av-sax",
+    "label": "ME AV Short-Axis",
+    "aseCode": "ME_AV_SAX",
+    "station": "ME",
+    "probePose": {
+      "sMm": 83,
+      "rollDeg": 0,
+      "anteDeg": 0,
+      "lateralDeg": 0,
+      "omniplaneDeg": 40
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 12,
+      "angleDeg": 12
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "me-av-lax",
+    "label": "ME AV Long-Axis",
+    "aseCode": "ME_AV_LAX",
+    "station": "ME",
+    "probePose": {
+      "sMm": 83,
+      "rollDeg": 0,
+      "anteDeg": 0,
+      "lateralDeg": 0,
+      "omniplaneDeg": 130
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 12,
+      "angleDeg": 15
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "me-rv-io",
+    "label": "ME RV Inflow-Outflow",
+    "aseCode": "ME_RV_IO",
+    "station": "ME",
+    "probePose": {
+      "sMm": 97,
+      "rollDeg": 0,
+      "anteDeg": 0,
+      "lateralDeg": 10,
+      "omniplaneDeg": 75
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 15,
+      "angleDeg": 15
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  },
+  {
+    "id": "me-bicaval",
+    "label": "ME Bicaval",
+    "aseCode": "ME_BICAVAL",
+    "station": "ME",
+    "probePose": {
+      "sMm": 92,
+      "rollDeg": 10,
+      "anteDeg": 0,
+      "lateralDeg": 0,
+      "omniplaneDeg": 95
+    },
+    "targetStructures": [
+      "heart"
+    ],
+    "tolerance": {
+      "sMm": 15,
+      "angleDeg": 15
+    },
+    "validation": {
+      "status": "pending",
+      "approvedBy": null,
+      "approvedAt": null
+    }
+  }
+]

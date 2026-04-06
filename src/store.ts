@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import type { vtkImageData as VtkImageData } from '@kitware/vtk.js/Common/DataModel/ImageData';
+import type vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 
 import { loadCaseBundle, loadCaseIndex, type CaseIndexEntry, type CaseManifest } from './assets';
 import { clamp } from './core/math';
@@ -19,7 +21,9 @@ interface SceneSlice {
   currentCase: CaseIndexEntry | null;
   currentCaseId: string | null;
   manifest: CaseManifest | null;
+  meshes: readonly vtkActor[];
   probePath: CenterlinePath | null;
+  volume: VtkImageData | null;
   views: ViewPreset[];
   loadPhase: LoadPhase;
   structures: string[];
@@ -228,7 +232,9 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
       currentCase: null,
       currentCaseId: null,
       manifest: null,
+      meshes: [],
       probePath: null,
+      volume: null,
       views: VIEW_PRESETS,
       loadPhase: 'idle',
       structures: [],
@@ -279,7 +285,9 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               currentCase: null,
               currentCaseId: null,
               manifest: null,
+              meshes: [],
               probePath: null,
+              volume: null,
               views: VIEW_PRESETS,
               loadPhase: 'error',
               structures: [],
@@ -304,7 +312,9 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               currentCase,
               currentCaseId: currentCase.id,
               manifest: bundle.manifest,
+              meshes: bundle.meshes,
               probePath: bundle.probePath,
+              volume: bundle.volume,
               views: bundle.views,
               loadPhase: 'ready',
               structures: bundle.manifest.structures,
@@ -322,7 +332,9 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               currentCase: null,
               currentCaseId: null,
               manifest: null,
+              meshes: [],
               probePath: null,
+              volume: null,
               views: VIEW_PRESETS,
               loadPhase: 'error',
               structures: [],

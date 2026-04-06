@@ -15,3 +15,7 @@ out/
 coverage/
 *.log
 .vite/
+.claude/
+test-results/
+playwright-report/
+data/raw/

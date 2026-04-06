@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-
-import { getSyntheticShellVolume } from './assets';
 import {
   ObliqueSlicePane,
   PseudoTeePane,
@@ -51,7 +49,9 @@ export default function App() {
   const currentCase = useTeeSimStore((state) => state.scene.currentCase);
   const currentCaseId = useTeeSimStore((state) => state.scene.currentCaseId);
   const manifest = useTeeSimStore((state) => state.scene.manifest);
+  const meshes = useTeeSimStore((state) => state.scene.meshes);
   const probePath = useTeeSimStore((state) => state.scene.probePath);
+  const volume = useTeeSimStore((state) => state.scene.volume);
   const loadPhase = useTeeSimStore((state) => state.scene.loadPhase);
   const structures = useTeeSimStore((state) => state.scene.structures);
   const loadCaseIndex = useTeeSimStore((state) => state.scene.loadCaseIndex);
@@ -88,11 +88,6 @@ export default function App() {
     store: useTeeSimStore,
   });
 
-  const shellVolume = useMemo(
-    () => (manifest ? getSyntheticShellVolume(manifest.caseId) : null),
-    [manifest],
-  );
-
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -118,8 +113,11 @@ export default function App() {
         <span className="status-pill">Bundle {manifest?.bundleVersion ?? currentCase?.bundleVersion ?? 'n/a'}</span>
         <span className="status-pill">Probe constrained to esophageal centerline</span>
         <span className="status-pill">CT-derived anatomical slice, not ultrasound</span>
-        {shellVolume ? (
-          <span className="status-pill">Synthetic shell volume until public `heart_roi.vti` ships</span>
+        {volume ? (
+          <span className="status-pill">Public `heart_roi.vti` loaded</span>
+        ) : null}
+        {meshes.length > 0 ? (
+          <span className="status-pill">Public GLB anatomy loaded</span>
         ) : null}
         {loadPhase === 'loading' ? (
           <span className="status-pill loading-pill" data-testid="loading-indicator">
@@ -144,16 +142,16 @@ export default function App() {
                   appearance={{ slabThicknessMm: 4 }}
                   height={height}
                   ref={pseudoTeePaneRef}
-                  volume={shellVolume}
+                  volume={volume}
                   width={width}
                 />
               )}
             </MeasuredRendererSurface>
 
-            {labelsVisible ? (
+            {labelsVisible && !volume ? (
               <p className="pane-note">
-                Wave 2 wiring is live. The renderer is currently fed by a synthetic teaching volume until
-                the public case bundle ships a real `heart_roi.vti`.
+                This case bundle does not expose a `heart_roi.vti`, so the pseudo-TEE and oblique panes
+                remain unavailable.
               </p>
             ) : null}
           </div>
@@ -172,6 +170,7 @@ export default function App() {
               {({ height, width }) => (
                 <Scene3DPane
                   height={height}
+                  meshes={meshes}
                   ref={scenePaneRef}
                   width={width}
                 />
@@ -191,7 +190,7 @@ export default function App() {
                 <ObliqueSlicePane
                   height={height}
                   ref={obliquePaneRef}
-                  volume={shellVolume}
+                  volume={volume}
                   width={width}
                 />
               )}

@@ -1,14 +1,18 @@
 {
   "cases": [
     {
-      "caseId": "stub_case_01",
-      "title": "Stub Normal Adult",
-      "description": "Synthetic stub for development"
+      "id": "lctsc_s1_006",
+      "title": "LCTSC S1-006 (Female, Thorax CT)",
+      "description": "Thorax CT with heart, esophagus, lung, and spinal cord segmentation from the LCTSC challenge",
+      "bundleVersion": "0.1.0",
+      "caseVersion": "0.1.0"
     },
     {
-      "caseId": "lctsc_s1_006",
-      "title": "LCTSC S1-006 (Female, Thorax CT)",
-      "description": "Thorax CT with heart, esophagus, lung, spinal cord segmentation from LCTSC challenge"
+      "id": "ts-001",
+      "title": "TS-001 Stub Normal Adult",
+      "description": "Synthetic stub bundle for development and contract testing",
+      "bundleVersion": "0.1.0",
+      "caseVersion": "0.1.0"
     }
   ]
 }
