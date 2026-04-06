@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TeeSim pseudo-TEE rendering spike</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1219;
+        --panel: rgba(19, 28, 37, 0.84);
+        --panel-border: rgba(164, 187, 204, 0.18);
+        --text: #e8f0f7;
+        --muted: #9db0c1;
+        --accent: #8dd6cf;
+        --accent-strong: #e0b36b;
+        --danger: #ff8f87;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(67, 116, 139, 0.26), transparent 28%),
+          radial-gradient(circle at top right, rgba(201, 144, 54, 0.16), transparent 22%),
+          linear-gradient(160deg, #091017 0%, #0e1822 46%, #071018 100%);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+        gap: 20px;
+        padding: 20px;
+      }
+
+      .panel,
+      .viewport-card {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 20px 42px rgba(0, 0, 0, 0.28);
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .eyebrow {
+        margin-bottom: 10px;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .headline {
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1;
+        margin-bottom: 12px;
+      }
+
+      .intro {
+        color: var(--muted);
+        line-height: 1.5;
+        margin-bottom: 20px;
+      }
+
+      .controls {
+        display: grid;
+        gap: 14px;
+      }
+
+      .control {
+        display: grid;
+        gap: 8px;
+      }
+
+      .control-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .control-value {
+        color: var(--text);
+      }
+
+      input[type="range"],
+      select,
+      button {
+        width: 100%;
+      }
+
+      input[type="range"] {
+        accent-color: var(--accent-strong);
+      }
+
+      select,
+      button {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: rgba(7, 12, 18, 0.88);
+        color: var(--text);
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+        background: linear-gradient(135deg, rgba(224, 179, 107, 0.92), rgba(141, 214, 207, 0.82));
+        color: #081218;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .divider {
+        height: 1px;
+        margin: 18px 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+      }
+
+      .findings {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .finding {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(9, 15, 22, 0.76);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .finding-label {
+        display: block;
+        margin-bottom: 5px;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .finding-value {
+        font-size: 14px;
+        line-height: 1.45;
+        color: var(--text);
+      }
+
+      .finding-value.is-warning {
+        color: var(--danger);
+      }
+
+      .viewports {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.9fr);
+        gap: 20px;
+      }
+
+      .viewport-card {
+        padding: 14px;
+        min-height: 320px;
+      }
+
+      .viewport-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 12px;
+      }
+
+      .viewport-title {
+        font-size: 20px;
+      }
+
+      .viewport-subtitle {
+        margin-top: 6px;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .status-pill {
+        align-self: start;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(141, 214, 207, 0.12);
+        border: 1px solid rgba(141, 214, 207, 0.3);
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 11px;
+        color: var(--accent);
+      }
+
+      .vtk-view {
+        min-height: 420px;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(180deg, rgba(8, 14, 20, 0.96), rgba(14, 25, 35, 0.96));
+      }
+
+      .meta {
+        display: grid;
+        gap: 6px;
+        margin-top: 12px;
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .legend {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(7, 12, 18, 0.74);
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .legend strong {
+        color: var(--text);
+      }
+
+      @media (max-width: 1180px) {
+        .layout,
+        .viewports {
+          grid-template-columns: 1fr;
+        }
+
+        .vtk-view {
+          min-height: 340px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="panel">
+        <div class="eyebrow">ADR-0001 go/no-go spike</div>
+        <h1 class="headline">Pseudo-TEE Rendering</h1>
+        <p class="intro">
+          Standalone VTK.js spike for a CT-derived anatomical slice. The left render path uses
+          <code>vtkImageReslice</code> plus a sector mask and depth attenuation. The right path uses
+          <code>vtkImageResliceMapper</code> and <code>vtkImageProperty</code> as the GPU alternative.
+        </p>
+
+        <div class="controls">
+          <label class="control">
+            <span class="control-head">
+              <span>Plane angle</span>
+              <span id="plane-angle-value" class="control-value">35°</span>
+            </span>
+            <input id="plane-angle" type="range" min="0" max="180" step="1" value="35" />
+          </label>
+
+          <label class="control">
+            <span class="control-head">
+              <span>Depth</span>
+              <span id="depth-value" class="control-value">145 mm</span>
+            </span>
+            <input id="depth" type="range" min="70" max="180" step="1" value="145" />
+          </label>
+
+          <label class="control">
+            <span class="control-head">
+              <span>Sector angle</span>
+              <span id="sector-angle-value" class="control-value">90°</span>
+            </span>
+            <input id="sector-angle" type="range" min="45" max="120" step="1" value="90" />
+          </label>
+
+          <label class="control">
+            <span class="control-head">
+              <span>Thick slab</span>
+              <span id="slab-value" class="control-value">4 mm</span>
+            </span>
+            <input id="slab" type="range" min="1" max="8" step="1" value="4" />
+          </label>
+
+          <label class="control">
+            <span class="control-head">
+              <span>CPU interpolation</span>
+            </span>
+            <select id="interpolation">
+              <option value="linear" selected>Linear</option>
+              <option value="nearest">Nearest</option>
+              <option value="cubic">Cubic</option>
+            </select>
+          </label>
+
+          <button id="reset" type="button">Reset spike state</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div id="findings" class="findings"></div>
+      </aside>
+
+      <main class="viewports">
+        <section class="viewport-card">
+          <div class="viewport-head">
+            <div>
+              <h2 class="viewport-title">CT-derived anatomical slice</h2>
+              <p class="viewport-subtitle">
+                CPU path: <code>vtkImageReslice</code> → sector mask → attenuation → <code>vtkImageSlice</code>
+              </p>
+            </div>
+            <div id="status" class="status-pill">Booting spike…</div>
+          </div>
+          <div id="cpu-view" class="vtk-view"></div>
+          <div class="meta">
+            <span>Synthetic volume: 256³ voxels, int16 scalar field, 1 mm spacing.</span>
+            <span>Probe model in the spike is simplified to a fixed posterior origin plus omniplane-style rotation.</span>
+          </div>
+          <div class="legend">
+            <strong>Display note:</strong> this is intentionally labeled as a CT-derived anatomical slice, not
+            a simulated ultrasound image. The wedge presentation and attenuation are presentational layers over
+            a synthetic anatomical reslice.
+          </div>
+        </section>
+
+        <section class="viewport-card">
+          <div class="viewport-head">
+            <div>
+              <h2 class="viewport-title">GPU alternative path</h2>
+              <p class="viewport-subtitle">
+                <code>vtkImageResliceMapper</code> + <code>vtkImageProperty</code> on the same oblique plane
+              </p>
+            </div>
+            <div class="status-pill">Comparison</div>
+          </div>
+          <div id="gpu-view" class="vtk-view"></div>
+          <div class="legend">
+            <strong>Current spike boundary:</strong> the GPU path proves oblique slicing, interpolation switching,
+            and slab thickness on the live 3D volume. The sector fan mask is applied in the CPU presentation path.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
