@@ -1,270 +1,302 @@
 # ADR-0001: MVP Architecture
 
 **Date:** 2026-04-06
-**Status:** Proposed
-**Synthesized from:** 4 independent proposals (Web-rendering, Data-pipeline, Medical-education, Platform-architecture)
+**Status:** Accepted (revised after review)
+**Synthesized from:** 4 independent proposals + 3 critical reviews
 
 ---
 
 ## Context
 
-TeeSim is a browser-based 3D TEE simulator for cardiology education. The repository was bootstrapped with product docs, data governance rules, and a public dataset survey. Four independent architecture proposals were generated in parallel from different perspectives:
+TeeSim is a browser-based 3D TEE simulator for cardiology education. Four independent architecture proposals were generated in parallel, then reviewed by 3 independent critics:
 
+**Proposals:**
 1. [Web-rendering-first](../research/2026-04-06-mvp-proposal-web-rendering.md) — Codex gpt-5.4
 2. [Data-pipeline-first](../research/2026-04-06-mvp-proposal-data-pipeline.md) — Codex gpt-5.4
 3. [Medical-education-first](../research/2026-04-06-mvp-proposal-medical-education.md) — Claude opus
 4. [Platform-architecture-first](../research/2026-04-06-mvp-proposal-platform-architecture.md) — Claude opus
 
-This ADR synthesizes the four into a unified architecture, resolving conflicts explicitly.
+**Reviews:**
+- [Architecture critic](../research/2026-04-06-adr-0001-review-architecture.md) — Verdict: Reject (fixable issues)
+- [Domain expert](../research/2026-04-06-adr-0001-review-domain.md) — Verdict: Accept-with-changes
+- [Pragmatic shipping lead](../research/2026-04-06-adr-0001-review-pragmatic.md) — Verdict: Accept-with-changes
+
+This revision addresses the reviewers' findings. Changes from the original synthesis are marked with **[REV]**.
 
 ---
 
 ## Decision
 
+### 0. **[REV]** Mandatory First Action: Pseudo-TEE Rendering Spike
+
+Before any other implementation work, complete a **2-3 day standalone spike**:
+- Load a test VTI volume in VTK.js
+- Produce a sector-masked oblique reslice on a single HTML page
+- Validate `vtkImageReslice` interpolation behavior (nearest-only limitation?)
+- Test `vtkImageResliceMapper` + `vtkImageProperty` as alternative path
+- Evaluate thick-slab reslice via `setSlabNumberOfSlices()` for elevational thickness
+
+**If this spike takes > 5 days or produces unacceptable results, the entire timeline and rendering stack choice must be re-evaluated.** This is the highest-risk technical bet in the project.
+
 ### 1. Rendering Engine: VTK.js-primary, R3F optional for 3D scene
 
-**Conflict:** Web-rendering recommends VTK.js-only ("dual-engine synchronization is integration tax"). Platform-architecture recommends VTK.js + Three.js/R3F hybrid ("R3F is 3-5x more productive for mesh-only rendering").
-
-**Resolution:** Start with VTK.js as the sole renderer. All components interface through a `RenderCoordinator` abstraction. If 3D scene development velocity is too slow after the first 2 weeks, introduce R3F for the 3D anatomy pane only — behind the same coordinator interface, in a separate canvas. The key constraint is: **never share a WebGL context between VTK.js and Three.js**.
-
-**Rationale:** The web-rendering proposal correctly identifies that the bottleneck is correct synchronized medical reslicing, not visual polish. Starting single-engine avoids integration risk. But the escape hatch to R3F exists cleanly.
+Start with VTK.js as the sole renderer. If 3D scene development velocity is too slow after 2 weeks, introduce R3F for the 3D anatomy pane only in a separate canvas. **Never share a WebGL context between VTK.js and Three.js.**
 
 ### 2. Framework: React 18 + TypeScript + Vite + Zustand
 
-**All proposals agree.** React as the UI shell. Zustand for state (fine-grained subscriptions, synchronous `getState()` in the rAF loop, < 2 KB). Vite for build. WebGL2 baseline, WebGPU deferred.
+All proposals agree. WebGL2 baseline.
 
-### 3. State Architecture: Single `ProbePose` as source of truth
-
-**All proposals agree** on the core data model:
+### 3. **[REV]** State Architecture: ProbePose with explicit units
 
 ```typescript
 type ProbePose = {
-  s: number;             // position on esophageal centerline
-  rollDeg: number;       // axial rotation
-  anteDeg: number;       // anteflexion / retroflexion
-  lateralDeg: number;    // lateral flex
-  omniplaneDeg: number;  // imaging plane angle [0, 180]
+  sMm: number;            // [REV] arc-length position in millimeters (not normalized)
+  rollDeg: number;        // axial rotation, degrees
+  anteDeg: number;        // anteflexion (+) / retroflexion (-), degrees
+  lateralDeg: number;     // lateral flex, degrees
+  omniplaneDeg: number;   // imaging plane angle [0, 180], degrees
 };
 ```
 
-Zustand store holds `ProbePose`. `RenderCoordinator` derives `ImagingPlane` from it and pushes to all three panes synchronously in a single `requestAnimationFrame`. React never sits in the frame loop — UI components use selector subscriptions.
+**[REV] Critical fix from architecture review:** `s` is defined as arc-length in millimeters (`sMm`), matching `probe_path.json`'s `arcLengthMm` array. A normalized `u ∈ [0,1]` is derived for UI sliders only. This unit is used consistently in `views.json`, `probe_path.json`, `@teesim/core`, and the scoring engine.
 
-### 4. Anchor Views: 10, with pedagogical ordering
+### 4. **[REV]** Probe Mechanical Model
 
-**Conflict:** Web-rendering and Data-pipeline say 8. Medical-education says 10.
+**[REV] Added per domain review.** The 5-DOF `ProbePose` is the user-facing control state. The runtime must also model:
 
-**Resolution:** 10 views. Medical-education provides a compelling pedagogical progression:
+- **Shaft frame:** derived from centerline tangent + parallel-transport normal at `sMm`
+- **Distal bending section:** configurable arc length (~3-4 cm), applies ante/lateral flex as rotations over this segment
+- **Tip frame:** after flex, roll is applied about the shaft axis at the tip
+- **Transducer origin:** offset from the tip along the distal axis (~1 cm proximal to the tip)
+- **Imaging plane:** omniplane rotation is applied about the transducer axis, not the shaft centerline
 
-| Order | View | Station | Key DOF Introduced |
-|-------|------|---------|-------------------|
+`probe_path.json` must carry **parallel-transport reference frames** (not Frenet frames) to avoid frame flips in low-curvature esophageal segments. The `@teesim/core` probe model is the normative implementation of this geometry.
+
+**MVP simplification acknowledged:** The probe is always constrained to the centerline (no radial offset or wall-apposition model). This is disclosed in the UI.
+
+### 5. **[REV]** Anchor Views: 8 required, 2 stretch
+
+**[REV] Compromise between 10 (medical-education), 8 (web-rendering/data-pipeline), and 5 (pragmatic).** 8 views are hard release blockers. 2 additional views ship only if clinically validated within schedule.
+
+**Required (8):**
+
+| # | View | Station | Key DOF |
+|---|------|---------|---------|
 | 1 | ME Four-Chamber | ME | Position, slight retroflexion |
-| 2 | ME Two-Chamber | ME | Omniplane (60-70°) |
-| 3 | ME Long-Axis | ME | Omniplane (120-140°) — completes "omniplane triad" |
+| 2 | ME Two-Chamber | ME | Omniplane 60-70° |
+| 3 | ME Long-Axis | ME | Omniplane 120-140° |
 | 4 | TG Mid Short-Axis | TG | Station change, anteflexion |
-| 5 | ME AV Short-Axis | ME | Position + omniplane combo |
+| 5 | ME AV Short-Axis | ME | Position + omniplane |
 | 6 | ME AV Long-Axis | ME | Paired SAX/LAX concept |
 | 7 | ME RV Inflow-Outflow | ME | Lateral flex, right heart |
 | 8 | ME Bicaval | ME | Roll DOF |
-| 9 | ME Asc Aortic SAX | UE-ME | Upper esophageal, great vessels |
-| 10 | Desc Aortic SAX/LAX | ME | Posterior anatomy, omniplane toggle |
 
-Views 1-3 form a "beginner triad" from one probe position. Views 5-6 teach paired SAX/LAX. Views 9-10 extend to great vessel assessment. This covers all 5 DOFs and all major structures.
+**Stretch (if validated in time):**
 
-### 5. Asset Format: Two VTIs, not one
+| 9 | ME Asc Aortic SAX | UE-ME | Upper esophageal |
+| 10 | Desc Aortic SAX + LAX | ME | Posterior anatomy |
 
-**Conflict:** Web-rendering proposes one `heart_roi.vti`. Data-pipeline proposes two: `heart_intensity.vti` (int16) + `heart_labels.vti` (uint8).
+**[REV]** Desc Aortic SAX and LAX are stored as **separate scoring targets** in `views.json` even when taught as a combined unit, per domain review.
 
-**Resolution:** Two VTIs. Data-pipeline's rationale is correct: intensity and labels have different scalar types, different filtering rules (interpolation vs nearest-neighbor), and different runtime consumers (oblique slice vs pseudo-TEE structure lookup). Same grid geometry for both.
+### 6. **[REV]** Asset Format: Single VTI for MVP, split later
 
-### 6. Asset Pipeline: 3D Slicer + SlicerHeart offline factory
+**[REV] Pragmatic review override.** Ship one `heart_roi.vti` (int16 intensity) for MVP. Derive structure identity from mesh-based spatial lookup or a packed label channel. Split to two VTIs only if the single-VTI approach causes measurable quality problems. This halves volume pipeline complexity.
 
-**All proposals agree.** The pipeline is:
+### 7. **[REV]** Pseudo-TEE: "Sectorized Anatomical Slice", not ultrasound
 
-1. Ingest raw data → normalize to NIfTI RAS-mm
-2. Segmentation cleanup in 3D Slicer Segment Editor
-3. Esophageal centerline extraction via VMTK (QA: ≥ 97% inside-lumen fraction)
-4. Landmark and view authoring in SlicerHeart
-5. Mesh export: `scene.glb` (coarse thorax, ≤ 500K tris) + `heart_detail.glb` (cardiac, ≤ 300K tris)
-6. Volume export: `heart_intensity.vti` + `heart_labels.vti` (0.8 mm isotropic, ≤ 250³ voxels)
-7. Motion: Sunnybrook ED→ES displacement, 10 phases, retargeted per case → `motion.bin`
-8. Bundle assembly + CI validation (schema, budgets, license provenance)
+**[REV] Framing change from domain review.** The MVP pseudo-TEE pane produces a **sectorized anatomical cross-section** derived from CT intensity data, not a simulated ultrasound image. The UI must label it accordingly: "CT-derived anatomical slice" or similar. This sets correct trainee expectations.
 
-See Data-pipeline proposal for full JSON schema examples (`case_manifest.json`, `landmarks.json`, `views.json`, `probe_path.json`).
+Minimum viable rendering:
+1. Oblique reslice from `heart_roi.vti` via VTK.js
+2. Sector wedge mask (fan shape)
+3. Depth-dependent grayscale attenuation
+4. **[REV]** Thick-slab reslice (~3-5 mm) to approximate elevational beam thickness
 
-### 7. Data Governance
+Stretch (not required for ship):
+- Speckle noise, boundary enhancement, posterior shadowing
 
-**All proposals agree.** Only bundle-safe open datasets in public release:
+### 8. Asset Pipeline: 3D Slicer + SlicerHeart offline factory
 
-| MVP Bundle | Internal Only |
-|-----------|--------------|
-| Open Anatomy Thorax Atlas | MM-WHS |
-| HRA 3D Reference Objects | MITEA |
-| SIO (Visible Human) | EchoNet-Dynamic |
-| TotalSegmentator CT (open tasks) | MVSeg2023 |
-| Sunnybrook Cardiac Data | TotalSegmentator restricted subtasks |
-| SlicerHeart (tooling) | XCAT (licensed) |
+Pipeline stages (unchanged):
+1. Ingest → normalize to NIfTI RAS-mm
+2. Segmentation cleanup
+3. **[REV]** Esophageal centerline: **manually author for MVP** using 3D Slicer markup tools + spline fitting. VMTK automated extraction is Phase 1.5 optimization.
+4. Landmark and view authoring
+5. Mesh export: `scene.glb` + `heart_detail.glb`
+6. Volume export: `heart_roi.vti`
+7. **[REV]** ~~Motion: Sunnybrook retargeting~~ → **CUT from MVP.** No `motion.bin`. Static anatomy only. Motion is Phase 1.5.
+8. Bundle assembly + validation
 
-Every `case_manifest.json` declares source datasets and license bucket. CI rejects unknown or non-bundle-safe sources.
+**[REV]** Coordinate-system contract: `case_manifest.json` must include `worldFromImage` and `worldFromMesh` affine transforms. CI validates image bounds, landmark positions, and mesh centroids against these affines to prevent left-right mirroring.
 
-### 8. Cases: 1 canonical + 3 patient-like
+### 9. **[REV]** Cases: 4 TotalSegmentator CT cases
 
-**All proposals agree.**
+**[REV] Per pragmatic review:** Drop the multi-atlas canonical case assembly (Open Anatomy + HRA + SIO) from MVP. Use 4 TotalSegmentator CT cases (all from the same pipeline, consistent coordinates). The atlas-assembled canonical case is Phase 1.5 once the pipeline is proven.
 
-- Canonical case: Open Anatomy + HRA + SIO assembly
-- Patient-like cases: 3 TotalSegmentator CT open-task cases
-- Start with TotalSegmentator 102-case small subset for pipeline bring-up
+### 10. Data Governance
 
-### 9. 3-Pane Layout
+Only bundle-safe datasets in public release. Every `case_manifest.json` declares source datasets and license bucket. CI rejects non-bundle-safe sources.
 
-**All proposals agree** on the layout:
+### 11. 3-Pane Layout
 
-- Left (28%): pseudo-TEE image (sector wedge, grayscale LUT, depth attenuation)
-- Center (44%): 3D anatomy scene (probe, centerline, sector plane, mesh highlighting)
-- Right (28%): oblique slice (same plane, label-colormap)
-- Bottom dock: probe controls (5 DOF sliders) + view preset list
+- Left (28%): pseudo-TEE (sectorized anatomical slice)
+- Center (44%): 3D anatomy scene (probe, centerline, sector plane)
+- Right (28%): oblique slice
+- Bottom dock: probe controls + view presets
 - Collapse below 1180 px to tabbed panes
 
-### 10. Probe Interaction: Preset-first, then fine-tune
+### 12. Probe Interaction: Preset-first, then fine-tune
 
-**All proposals agree** on constrained interaction:
+Constrained to esophageal centerline. 5-DOF sliders + keyboard shortcuts. View matching: weighted 5-DOF distance → green (≥ 0.85) / amber (0.60-0.84) / gray (< 0.60).
 
-- Primary: DOF sliders + keyboard shortcuts (`1-0` for view presets, arrow keys for probe)
-- Probe always stays on esophageal centerline
-- No free 6-DOF dragging, no unconstrained camera
-- Camera: orbit in 3D pane only, left-posterior oblique teaching default
-- View matching: weighted 5-DOF distance with per-view tolerance windows → green (≥ 0.85), amber (0.60-0.84), gray (< 0.60)
+**[REV]** MVP scoring is a **"nearest preset indicator"** — simple 5-DOF distance only. Structure-visibility checks and image-quality heuristics are Phase 1.5 (per architecture review: don't call it a scoring engine until it's geometry-aware).
 
-### 11. Repo Structure: Monorepo with package boundaries
+### 13. **[REV]** Repo Structure: Single src/ with folder conventions
 
-**Resolution:** Adopt Platform-architecture's monorepo design. The package isolation it proposes — especially `@teesim/core` with zero dependencies — is architecturally sound and protects the probe math from rendering coupling.
+**[REV] Per pragmatic review:** Replace the 4-package monorepo with a single `src/` directory. Enforce import boundaries with ESLint `import/no-restricted-paths`. Extract packages when there is a real second consumer.
 
 ```
 teesim/
-  packages/
-    core/         # probe model, transforms, view matcher — zero deps, pure TS
-    assets/       # loader, cache, GPU budget tracker
-    renderer/     # VTK.js panes, sync manager, perf monitor
+  src/
+    core/         # probe model, transforms, view matcher — zero external deps
+    assets/       # loader (simple fetch)
+    renderer/     # VTK.js panes, sync manager
     ui/           # React UI: probe HUD, view picker, labels, layout
-  apps/
-    web/          # Vite entry, Zustand store, service worker, PWA
+    education/    # view scoring, preset indicator
   tools/
-    asset-pipeline/  # Python scripts for 3D Slicer automation
-  cases/          # git-ignored; output from pipeline, served statically
-  docs/           # existing governance structure
-  changes/        # active work
+    asset-pipeline/  # Python scripts for 3D Slicer
+  cases/          # git-ignored; served statically
+  docs/
+  changes/
 ```
 
-Build: pnpm workspaces + Turborepo. CI: Vitest (unit) + Playwright (E2E) + visual regression screenshots of all 10 anchor views.
+### 14. **[REV]** Deployment: Simple static host
 
-### 12. Deployment: Cloudflare Pages + R2
+**[REV]** Vercel or Cloudflare Pages. Serve case assets from same origin. No R2 until bandwidth matters. No PWA. No service worker.
 
-App shell on Cloudflare Pages, case assets on R2 (zero egress, range requests). Immutable versioned asset paths. Brotli/gzip at CDN level.
+### 15. **[REV]** Clinical Validation as Release Gate
 
-### 13. Education Layer: Scoring in MVP, Tutorial in Phase 1.5
+**[REV] Added per architecture review.** `views.json` includes per-view approval metadata:
 
-**Resolution:** Medical-education's full design is excellent but exceeds MVP scope. Phasing:
+```json
+{
+  "id": "me-4c",
+  "probePose": { "sMm": 134.0, ... },
+  "validation": {
+    "approvedBy": null,
+    "approvedAt": null,
+    "status": "pending"
+  }
+}
+```
 
-| Phase | Education Feature |
-|-------|------------------|
-| **MVP** | View scoring engine (pure function, runs every frame), passive view-match overlay (green/amber/gray), view catalog with one-click snap-to-preset |
-| **Phase 1.5** | Tutorial engine (JSON-driven step sequencer), guided mode, progress tracker (localStorage), competency dashboard |
-| **Phase 2** | Assessment mode, educator dashboard, session replay, JSON export |
+**CI for public bundle fails if any required MVP view has `status != "approved"`.**
 
-The scoring engine and view tolerance data model from Medical-education are adopted in MVP. Tutorial JSON schema and content authoring are deferred.
+A board-certified echocardiographer must validate all 8 required views on each case before release. No case ships with unapproved views.
 
-### 14. Performance Budgets
+### 16. **[REV]** Asset Versioning
 
-| Budget | Target | Hard Cap |
-|--------|--------|----------|
-| Frame rate | 45-60 FPS | 30 FPS floor |
-| App shell JS/CSS | < 500 KB gzipped | 700 KB |
-| Critical case payload | < 12 MB gzipped | 18 MB |
-| Full case payload | < 45 MB gzipped | 60 MB |
-| Visible triangles | < 450K | 600K |
-| `scene.glb` | 100K-150K tris | 200K |
-| `heart_detail.glb` | 200K-250K tris | 300K |
-| VTI (each) | ≤ 28 MB uncompressed | 40 MB |
-| GPU memory per scene | < 220 MB | 256 MB |
-| Pseudo-TEE / oblique buffers | 768×768 | 1024×1024 |
+**[REV] Adopted from data-pipeline proposal per architecture review.** Three version layers:
 
-### 15. Phase 2 Extension Points
+- **Schema version** — JSON/binary layout contracts
+- **Bundle version** — released case collection (e.g., `0.1.0`)
+- **Case version** — individual case within a bundle
 
-Define these interfaces in `@teesim/core/types.ts` from day one (Platform-architecture proposal):
-
-- `VolumeSource` — MVP: static VTI. Phase 2: DICOMweb via Cornerstone3D
-- `ScoringSink` — MVP: no-op. Phase 2: backend persistence
-- `CaseSource` — MVP: static `index.json`. Phase 2: Orthanc DICOM server
-
-These cost nothing to ship but force the renderer to be volume-source-agnostic, enabling the DICOM route without refactoring.
+`bundle_manifest.json` includes per-asset SHA-256 hashes, pipeline git commit, generation timestamp, source dataset list. Published at `/cases/<bundleVersion>/<caseId>/...`. Immutable.
 
 ---
 
 ## Implementation Priority
 
-Based on all four proposals' convergence on what is highest-risk:
+**[REV] Reordered per architecture review:** First case end-to-end before pseudo-TEE styling.
 
-1. **`@teesim/core` probe kinematics + view matcher** — "the intellectual core" (L)
-2. **Pseudo-TEE pane** — "the product's reason to exist" (XL)
-3. **3D anatomy pane** (L)
-4. **Oblique slice pane** (M)
-5. **Asset pipeline: first case end-to-end** — "first case pays the integration tax" (L)
-6. **UI shell + probe controls** (L)
-7. **View scoring + overlay** (M)
-8. **Performance tuning + visual regression tests** (M)
-
-The highest-leverage sequence: get probe kinematics + pseudo-TEE working first. If those are wrong, everything else is wasted.
+1. **Pseudo-TEE spike** (2-3 days) — go/no-go gate
+2. **`src/core/` probe kinematics + view matcher** (L)
+3. **Asset pipeline: first TotalSegmentator CT case end-to-end** (L)
+4. **3D anatomy pane** — browser renders authored bundle correctly (L)
+5. **Oblique slice pane** (M)
+6. **Pseudo-TEE pane** — with validated real assets, not synthetic inputs (XL)
+7. **UI shell + probe controls** (L)
+8. **View scoring + preset indicator** (M)
+9. **Clinical validation of 8 views × 4 cases** (external dependency)
 
 ---
 
 ## Effort Estimate
 
+**[REV] After scope cuts:**
+
 | Component | Size |
 |-----------|------|
-| Monorepo setup + CI | S |
-| `@teesim/core` + tests | L |
-| `@teesim/assets` (loader, cache, budget) | M |
+| Pseudo-TEE spike | S (go/no-go) |
+| `src/core/` + unit tests | L |
+| `src/assets/` (simple fetch loader) | S |
 | Pseudo-TEE pane | XL |
 | 3D scene pane | L |
 | Oblique slice pane | M |
 | Sync manager | M |
 | UI (all components) | L |
-| App shell + PWA | M |
+| App shell (Vite) | S |
 | Asset pipeline scripts | L |
-| Asset authoring (4 cases) | XL (calendar-bound) |
-| Testing suite | L |
-| **Total (single dev)** | **10-14 weeks** |
+| Asset authoring (4 cases, manual centerline) | L-XL (calendar-bound) |
+| Unit tests (probe math, view matching) | M |
+| **Total (single dev)** | **8-10 weeks** |
 
-Critical path: pseudo-TEE pane + asset authoring (clinical expert dependency).
+Contingency recovered by cuts: ~4 weeks (motion, monorepo, PWA, visual regression, IndexedDB cache, canonical atlas assembly).
+
+---
+
+## What Was Cut from Original Synthesis
+
+| Cut | Rationale | Deferred To |
+|-----|-----------|-------------|
+| Cardiac motion (`motion.bin`) | High uncertainty, not needed for view-finding | Phase 1.5 |
+| 4-package monorepo (pnpm + Turborepo) | Overhead for solo dev; ESLint rules suffice | When 2nd consumer exists |
+| Canonical atlas case (Open Anatomy + HRA + SIO) | Multi-atlas registration is 1-3 weeks | Phase 1.5 |
+| PWA / service worker | No user need, stale-cache debugging risk | Post-launch if requested |
+| IndexedDB cache + GPU budget tracker | `fetch()` + HTTP caching suffices for 4 cases | When case count > 10 |
+| Playwright visual regression | Manual QA faster for solo dev | When rendering stabilizes |
+| Two VTIs per case | Single VTI halves pipeline complexity | If quality requires it |
+| Phase 2 abstractions (`VolumeSource`, `ScoringSink`, `CaseSource`) | Premature indirection | ADR-0002 with DICOM route |
+| Views 9-10 (Asc Aortic, Desc Aortic) | Clinical validation bottleneck | Ship if validated in time |
 
 ---
 
 ## Consequences
 
 **Positive:**
-- Single rendering engine minimizes integration risk
-- Package boundaries (core with zero deps) enable exhaustive unit testing of probe math
-- Two VTIs prevent type confusion between intensity and labels
-- Extension point interfaces allow Phase 2 DICOM route without refactoring
-- Data governance baked into CI from day one
+- Pseudo-TEE spike de-risks the biggest technical bet before investment
+- First case end-to-end validates pipeline before rendering investment
+- Single `src/` avoids build tooling overhead
+- Clinical validation as CI gate prevents shipping incorrect views
+- Explicit `sMm` units prevent cross-system unit confusion
+- "Sectorized anatomical slice" framing sets correct educational expectations
 
 **Negative:**
-- VTK.js has a steeper learning curve than Three.js for the 3D scene
-- VTK.js bundle size requires careful tree-shaking (~200-300 KB gzipped)
-- 10 views require more clinical expert authoring time than 8
-- Monorepo setup overhead for a single developer (offset by Turborepo caching)
+- Static anatomy (no motion) is visually less compelling
+- 4 TotalSegmentator cases may lack the anatomical polish of a curated atlas case
+- Simple 5-DOF scoring may produce false-positive view matches without structure visibility checks
 
-**Risks:**
-- GPU memory pressure on integrated GPUs (mitigated by hard budget enforcement + progressive quality degradation)
-- Pseudo-TEE may not look realistic enough (mitigated by explicit "CT-derived cross-section" framing, not claiming diagnostic ultrasound)
-- Clinical expert availability is a hard external dependency for view authoring/validation
+**Known Simplifications (disclosed in UI):**
+- Probe constrained to centerline (no wall apposition or radial offset)
+- Pseudo-TEE is CT-derived cross-section, not simulated ultrasound
+- No valve leaflets, chordae, or papillary muscles
 
 ---
 
 ## Related Artifacts
 
-- [Web-rendering-first proposal](../research/2026-04-06-mvp-proposal-web-rendering.md)
-- [Data-pipeline-first proposal](../research/2026-04-06-mvp-proposal-data-pipeline.md)
-- [Medical-education-first proposal](../research/2026-04-06-mvp-proposal-medical-education.md)
-- [Platform-architecture-first proposal](../research/2026-04-06-mvp-proposal-platform-architecture.md)
+**Proposals:**
+- [Web-rendering-first](../research/2026-04-06-mvp-proposal-web-rendering.md)
+- [Data-pipeline-first](../research/2026-04-06-mvp-proposal-data-pipeline.md)
+- [Medical-education-first](../research/2026-04-06-mvp-proposal-medical-education.md)
+- [Platform-architecture-first](../research/2026-04-06-mvp-proposal-platform-architecture.md)
+
+**Reviews:**
+- [Architecture review](../research/2026-04-06-adr-0001-review-architecture.md) — Reject → addressed
+- [Domain review](../research/2026-04-06-adr-0001-review-domain.md) — Accept-with-changes → addressed
+- [Pragmatic review](../research/2026-04-06-adr-0001-review-pragmatic.md) — Accept-with-changes → addressed
+
+**Source data:**
 - [Public data survey](../research/2026-04-06-tee-simulator-public-data-survey.md)
 - [Product goals and non-goals](../product/goals-non-goals.md)
