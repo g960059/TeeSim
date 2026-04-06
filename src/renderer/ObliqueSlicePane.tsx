@@ -1,4 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import vtkDataArray from '@kitware/vtk.js/Common/Core/DataArray.js';
+import vtkImageData from '@kitware/vtk.js/Common/DataModel/ImageData.js';
 import vtkColorTransferFunction from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction.js';
 import vtkImageMapper from '@kitware/vtk.js/Rendering/Core/ImageMapper.js';
 import vtkImageProperty from '@kitware/vtk.js/Rendering/Core/ImageProperty.js';
@@ -22,6 +24,13 @@ type PaneState = {
   imagingPlane?: ObliqueSlicePaneProps['imagingPlane'];
   volume?: VtkImageData | null;
   width: number;
+};
+
+type BlankImageRuntime = {
+  heightPx: number;
+  image: VtkImageData;
+  spacingMm: number;
+  widthPx: number;
 };
 
 const createCtTransferFunctions = (): {
@@ -52,6 +61,7 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
     const imageSliceRef = useRef<ReturnType<typeof vtkImageSlice.newInstance> | null>(null);
     const mapperRef = useRef<ReturnType<typeof vtkImageMapper.newInstance> | null>(null);
     const resliceRef = useRef<ReturnType<typeof vtkImageReslice.newInstance> | null>(null);
+    const blankImageRef = useRef<BlankImageRuntime | null>(null);
     const latestStateRef = useRef<PaneState>({
       height,
       imagingPlane,
@@ -69,6 +79,47 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       setIsLoading(nextLoading);
     };
 
+    const ensureBlankImage = (
+      widthPx: number,
+      heightPx: number,
+      spacingMm: number,
+    ): BlankImageRuntime => {
+      const existing = blankImageRef.current;
+      if (
+        existing &&
+        existing.widthPx === widthPx &&
+        existing.heightPx === heightPx &&
+        existing.spacingMm === spacingMm
+      ) {
+        return existing;
+      }
+
+      const image = vtkImageData.newInstance({
+        extent: [0, widthPx - 1, 0, heightPx - 1, 0, 0],
+        origin: [-(widthPx * spacingMm) / 2, 0, 0],
+        spacing: [spacingMm, spacingMm, 1],
+      });
+      const scalars = vtkDataArray.newInstance({
+        dataType: 'Uint8Array',
+        name: 'BlankObliqueSlice',
+        numberOfComponents: 1,
+        values: new Uint8Array(widthPx * heightPx),
+      });
+
+      image.getPointData().setScalars(scalars);
+      image.modified();
+
+      const runtime: BlankImageRuntime = {
+        heightPx,
+        image,
+        spacingMm,
+        widthPx,
+      };
+
+      blankImageRef.current = runtime;
+      return runtime;
+    };
+
     const flush = (): void => {
       const renderWindow = renderWindowRef.current;
       const mapper = mapperRef.current;
@@ -81,10 +132,12 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       const widthPx = Math.max(1, Math.round(latestStateRef.current.width));
       const heightPx = Math.max(1, Math.round(latestStateRef.current.height));
       const outputSpacingMm = 0.6;
+      const blankImage = ensureBlankImage(widthPx, heightPx, outputSpacingMm);
 
       fitSliceCamera(renderWindow, widthPx * outputSpacingMm, heightPx * outputSpacingMm);
 
       if (!latestStateRef.current.volume || !latestStateRef.current.imagingPlane) {
+        mapper.setInputData(blankImage.image);
         imageSlice.setVisibility(false);
         updateLoading(true);
         renderWindow.getRenderWindow().render();
@@ -123,12 +176,14 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
     }), []);
 
     useEffect(() => {
-      latestStateRef.current = {
-        height,
-        imagingPlane,
-        volume,
-        width,
-      };
+      latestStateRef.current.height = height;
+      latestStateRef.current.width = width;
+      if (imagingPlane !== undefined) {
+        latestStateRef.current.imagingPlane = imagingPlane;
+      }
+      if (volume !== undefined) {
+        latestStateRef.current.volume = volume;
+      }
       flush();
     }, [height, imagingPlane, volume, width]);
 
@@ -172,6 +227,7 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       return () => {
         imageSliceRef.current = null;
         mapperRef.current = null;
+        blankImageRef.current = null;
         resliceRef.current = null;
         disposePipeline(renderWindow);
         renderWindowRef.current = null;

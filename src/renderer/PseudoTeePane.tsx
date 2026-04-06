@@ -14,6 +14,7 @@ import {
   createRenderWindow,
   disposePipeline,
   fitSliceCamera,
+  setCanvasRenderState,
   setCanvasTestId,
 } from './vtk-helpers';
 
@@ -196,6 +197,7 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     const renderWindow = renderWindowRef.current;
     const reslice = resliceRef.current;
     const imageSlice = imageSliceRef.current;
+    const container = containerRef.current;
     if (!renderWindow || !reslice || !imageSlice) {
       return;
     }
@@ -217,6 +219,9 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
       imageSlice.setVisibility(false);
       updateLoading(true);
       renderWindow.getRenderWindow().render();
+      if (container) {
+        setCanvasRenderState(container, 'loading');
+      }
       return;
     }
 
@@ -245,6 +250,9 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     imageSlice.setVisibility(true);
     updateLoading(false);
     renderWindow.getRenderWindow().render();
+    if (container) {
+      setCanvasRenderState(container, 'ready');
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -263,13 +271,17 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
   }), []);
 
   useEffect(() => {
-    latestStateRef.current = {
-      appearance,
-      height,
-      imagingPlane,
-      volume,
-      width,
-    };
+    latestStateRef.current.height = height;
+    latestStateRef.current.width = width;
+    if (appearance !== undefined) {
+      latestStateRef.current.appearance = appearance;
+    }
+    if (imagingPlane !== undefined) {
+      latestStateRef.current.imagingPlane = imagingPlane;
+    }
+    if (volume !== undefined) {
+      latestStateRef.current.volume = volume;
+    }
     flush();
   }, [appearance, height, imagingPlane, volume, width]);
 
@@ -285,6 +297,7 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     const reslice = vtkImageReslice.newInstance();
 
     setCanvasTestId(container, 'pseudo-tee-canvas');
+    setCanvasRenderState(container, 'loading');
 
     reslice.setOutputDimensionality(2);
     reslice.setBackgroundColor([0, 0, 0, 0]);

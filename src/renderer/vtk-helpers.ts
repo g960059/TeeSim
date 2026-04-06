@@ -55,6 +55,16 @@ export const setCanvasTestId = (container: HTMLElement, testId: string): void =>
   }
 };
 
+export const setCanvasRenderState = (
+  container: HTMLElement,
+  renderState: 'empty' | 'loading' | 'ready',
+): void => {
+  const canvas = container.querySelector('canvas');
+  if (canvas) {
+    canvas.setAttribute('data-render-state', renderState);
+  }
+};
+
 export const loadGLB = async (url: string): Promise<VtkActor[]> => {
   const importer = vtkGLTFImporter.newInstance();
   const ready = new Promise<void>((resolve) => {

@@ -12,8 +12,6 @@ import { TeeSimPage } from './fixtures/teesim-page';
  */
 
 test.describe('Case loading', () => {
-  test.skip(true, 'Case loading not yet implemented — lights up when src/assets/ loader and case selector ship');
-
   test('case selector is visible', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.goto();
@@ -23,16 +21,17 @@ test.describe('Case loading', () => {
 
   test('selecting a case shows loading indicator', async ({ page }) => {
     const app = new TeeSimPage(page);
-    await app.goto();
+    await app.gotoWithCaseLoaded();
 
-    /* Open the case selector and pick the first available case. */
-    await app.caseSelector.click();
-    const firstCase = page.getByTestId('case-option').first();
-    await firstCase.click();
+    await page.route('**/cases/0.1.0/ts-001/case_manifest.json', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await route.continue();
+    });
 
-    /* A loading indicator should appear while the VTI is fetched. */
-    const loadingIndicator = page.getByTestId('loading-indicator');
-    await expect(loadingIndicator).toBeVisible();
+    await app.selectCase('TS-001 Stub Normal Adult');
+
+    await expect(app.loadingIndicator).toBeVisible();
+    await expect(app.caseSelector).toContainText('TS-001 Stub Normal Adult', { timeout: 30_000 });
   });
 
   test('after loading, 3D pane shows rendered content (canvas has non-zero pixels)', async ({ page }) => {

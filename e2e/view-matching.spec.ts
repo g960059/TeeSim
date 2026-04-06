@@ -13,9 +13,18 @@ import { TeeSimPage } from './fixtures/teesim-page';
  * distance only. Structure-visibility checks are Phase 1.5.
  */
 
-test.describe('View match indicator', () => {
-  test.skip(true, 'View matching not yet implemented — lights up when src/education/view-scoring ships');
+const presetSequence = [
+  'me-4c',
+  'me-2c',
+  'me-lax',
+  'tg-sax',
+  'me-av-sax',
+  'me-av-lax',
+  'me-rv-io',
+  'me-bicaval',
+] as const;
 
+test.describe('View match indicator', () => {
   test('view match indicator is visible', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
@@ -23,33 +32,30 @@ test.describe('View match indicator', () => {
     await expect(app.viewMatchIndicator).toBeVisible();
   });
 
-  test('after clicking ME 4C preset, indicator shows green Match state', async ({ page }) => {
+  test('each preset click shows a green Match state', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
+    await expect(app.caseSelector).toContainText('LCTSC S1-006');
 
-    /* Navigate directly to the ME 4C preset. */
-    await app.clickPreset('me-4c');
+    for (const preset of presetSequence) {
+      await app.clickPreset(preset);
+      await expect(app.viewMatchIndicator).toHaveAttribute('data-match-level', 'green');
+      await expect(app.viewMatchIndicator).toContainText('Match');
 
-    /*
-     * The indicator should show "Match" with a green level.
-     * When the probe is exactly at a preset position, the 5-DOF
-     * distance is zero, so score should be >= 0.85.
-     */
-    const matchLevel = await app.getViewMatchColor();
-    expect(matchLevel).toBe('green');
-
-    const statusText = await app.getViewMatchStatus();
-    expect(statusText).toContain('Match');
+      if (preset === 'me-4c') {
+        await page.screenshot({ fullPage: true, path: 'screenshots/e2e-me4c-preset.png' });
+      }
+    }
   });
 
   test('after manual probe manipulation away from preset, indicator changes to amber or gray', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
+    await app.focusShell();
 
     /* Start at the ME 4C preset (green). */
     await app.clickPreset('me-4c');
-    const initialLevel = await app.getViewMatchColor();
-    expect(initialLevel).toBe('green');
+    await expect(app.viewMatchIndicator).toHaveAttribute('data-match-level', 'green');
 
     /*
      * Move the probe substantially away from the preset.

@@ -15,11 +15,10 @@ import { TeeSimPage } from './fixtures/teesim-page';
  */
 
 test.describe('Pseudo-TEE rendering', () => {
-  test.skip(true, 'Pseudo-TEE pane not yet implemented — lights up when src/renderer/pseudo-tee ships');
-
   test('pseudo-TEE pane renders a sector-shaped image (canvas is not blank)', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
+    await app.waitForCanvasReady(app.pseudoTeeCanvas);
 
     await expect(app.pseudoTeeCanvas).toBeVisible();
 
@@ -35,28 +34,10 @@ test.describe('Pseudo-TEE rendering', () => {
   test('changing probe position updates the pseudo-TEE image', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
+    await app.waitForCanvasReady(app.pseudoTeeCanvas);
+    await app.focusShell();
 
-    /*
-     * Capture a pixel snapshot before moving the probe.
-     * We sample a few pixels from the center of the canvas.
-     */
-    const pixelsBefore = await app.pseudoTeeCanvas.evaluate((el: HTMLCanvasElement) => {
-      const ctx = el.getContext('2d') || el.getContext('webgl2') || el.getContext('webgl');
-      if (!ctx) return null;
-
-      if (ctx instanceof WebGLRenderingContext || ctx instanceof WebGL2RenderingContext) {
-        const cx = Math.floor(el.width / 2);
-        const cy = Math.floor(el.height / 2);
-        const pixels = new Uint8Array(4);
-        ctx.readPixels(cx, cy, 1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, pixels);
-        return Array.from(pixels);
-      }
-
-      const cx = Math.floor(el.width / 2);
-      const cy = Math.floor(el.height / 2);
-      const imageData = (ctx as CanvasRenderingContext2D).getImageData(cx, cy, 1, 1);
-      return Array.from(imageData.data);
-    });
+    const imageBefore = await app.pseudoTeeCanvas.screenshot();
 
     /* Move the probe position substantially. */
     for (let i = 0; i < 10; i++) {
@@ -65,31 +46,10 @@ test.describe('Pseudo-TEE rendering', () => {
 
     /* Allow a frame or two for VTK.js to re-render. */
     await page.waitForTimeout(500);
+    await app.waitForCanvasReady(app.pseudoTeeCanvas);
 
-    const pixelsAfter = await app.pseudoTeeCanvas.evaluate((el: HTMLCanvasElement) => {
-      const ctx = el.getContext('2d') || el.getContext('webgl2') || el.getContext('webgl');
-      if (!ctx) return null;
-
-      if (ctx instanceof WebGLRenderingContext || ctx instanceof WebGL2RenderingContext) {
-        const cx = Math.floor(el.width / 2);
-        const cy = Math.floor(el.height / 2);
-        const pixels = new Uint8Array(4);
-        ctx.readPixels(cx, cy, 1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, pixels);
-        return Array.from(pixels);
-      }
-
-      const cx = Math.floor(el.width / 2);
-      const cy = Math.floor(el.height / 2);
-      const imageData = (ctx as CanvasRenderingContext2D).getImageData(cx, cy, 1, 1);
-      return Array.from(imageData.data);
-    });
-
-    /*
-     * The pixel values should differ after moving the probe.
-     * This is a coarse check — a more robust approach would
-     * compare a hash of the full canvas, but this suffices for MVP.
-     */
-    expect(pixelsAfter).not.toEqual(pixelsBefore);
+    const imageAfter = await app.pseudoTeeCanvas.screenshot();
+    expect(imageAfter.equals(imageBefore)).toBe(false);
   });
 
   test('"CT-derived anatomical slice" label is visible (not "ultrasound")', async ({ page }) => {

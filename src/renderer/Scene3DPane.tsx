@@ -8,6 +8,7 @@ import {
   createRenderWindow,
   createSectorPlane,
   disposePipeline,
+  setCanvasRenderState,
   setCanvasTestId,
 } from './vtk-helpers';
 import type { ImagingPlane, Vec3 } from '../core';
@@ -111,7 +112,10 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
     }
 
     currentMeshes.forEach((actor) => renderer.removeActor(actor));
-    resolvedMeshes.forEach((actor) => renderer.addActor(actor));
+    resolvedMeshes.forEach((actor) => {
+      actor.setVisibility(true);
+      renderer.addActor(actor);
+    });
     meshActorsRef.current = resolvedMeshes;
 
     placeholderActor.setVisibility(resolvedMeshes.length === 0);
@@ -158,6 +162,7 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
 
   const flush = (): void => {
     const renderWindow = renderWindowRef.current;
+    const container = containerRef.current;
     if (!renderWindow) {
       return;
     }
@@ -167,6 +172,10 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
     syncImagingPlane(latestStateRef.current.imagingPlane);
     clampOrbitCamera(renderWindow.getRenderer());
     renderWindow.getRenderWindow().render();
+    if (container) {
+      const renderState = latestStateRef.current.meshes?.length ? 'ready' : 'empty';
+      setCanvasRenderState(container, renderState);
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -185,11 +194,13 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
   }), []);
 
   useEffect(() => {
-    latestStateRef.current = {
-      imagingPlane,
-      meshes,
-      probeTransform,
-    };
+    latestStateRef.current.meshes = meshes;
+    if (imagingPlane !== undefined) {
+      latestStateRef.current.imagingPlane = imagingPlane;
+    }
+    if (probeTransform !== undefined) {
+      latestStateRef.current.probeTransform = probeTransform;
+    }
     flush();
   }, [imagingPlane, meshes, probeTransform]);
 
@@ -205,6 +216,7 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
     const placeholderActor = createPlaceholderBoxActor();
 
     setCanvasTestId(container, 'three-d-canvas');
+    setCanvasRenderState(container, latestStateRef.current.meshes?.length ? 'ready' : 'empty');
 
     probeActor.setVisibility(Boolean(latestStateRef.current.probeTransform));
     renderer.addActor(placeholderActor);

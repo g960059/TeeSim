@@ -10,9 +10,15 @@ import { TeeSimPage } from './fixtures/teesim-page';
  * ProbePose DOFs: sMm, rollDeg, anteDeg, lateralDeg, omniplaneDeg.
  */
 
-test.describe('Probe sliders are visible', () => {
-  test.skip(true, 'Probe controls not yet implemented — lights up when src/ui/probe-controls ships');
+const LCTSC_ME_4C_POSE = {
+  ante: '-5',
+  lateral: '0',
+  omniplane: '0',
+  roll: '0',
+  s: '97',
+} as const;
 
+test.describe('Probe sliders are visible', () => {
   test('all 5 DOF sliders are rendered', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
@@ -26,16 +32,17 @@ test.describe('Probe sliders are visible', () => {
 });
 
 test.describe('Probe slider interaction', () => {
-  test.skip(true, 'Probe controls not yet implemented — lights up when probe state + slider wiring ships');
-
   test('moving s slider updates the probe position display', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
 
     const valueBefore = await app.getSliderValue('s');
 
-    /* Drag the s slider to the right by 50 pixels. */
-    await app.dragSlider(app.sliderS, 50);
+    // Use keyboard to reliably change the slider value via React's controlled input
+    await app.sliderS.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
 
     const valueAfter = await app.getSliderValue('s');
     expect(valueAfter).not.toEqual(valueBefore);
@@ -43,11 +50,10 @@ test.describe('Probe slider interaction', () => {
 });
 
 test.describe('Keyboard shortcuts', () => {
-  test.skip(true, 'Keyboard shortcuts not yet implemented — lights up when src/ui/keyboard-handler ships');
-
   test('arrow up increases s position', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
+    await app.focusShell();
 
     const valueBefore = await app.getSliderValue('s');
 
@@ -60,6 +66,7 @@ test.describe('Keyboard shortcuts', () => {
   test('arrow down decreases s position', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
+    await app.focusShell();
 
     /* Move to a mid-range position first so there is room to go down. */
     for (let i = 0; i < 5; i++) {
@@ -76,8 +83,6 @@ test.describe('Keyboard shortcuts', () => {
 });
 
 test.describe('Preset buttons', () => {
-  test.skip(true, 'Preset buttons not yet implemented — lights up when view presets ship');
-
   const requiredPresets = [
     { id: 'me-4c', label: 'ME 4C' },
     { id: 'me-2c', label: 'ME 2C' },
@@ -102,23 +107,15 @@ test.describe('Preset buttons', () => {
   test('clicking ME 4C preset updates probe position sliders', async ({ page }) => {
     const app = new TeeSimPage(page);
     await app.gotoWithCaseLoaded();
-
-    /* Record initial slider values. */
-    const sBefore = await app.getSliderValue('s');
-    const omniplaneBefore = await app.getSliderValue('omniplane');
+    await expect(app.caseSelector).toContainText('LCTSC S1-006');
 
     /* Click the ME 4C preset. */
     await app.clickPreset('me-4c');
 
-    /*
-     * At least one DOF should have changed.
-     * ME 4C is at a specific sMm + slight retroflexion; the
-     * omniplane angle should be near 0 degrees.
-     */
-    const sAfter = await app.getSliderValue('s');
-    const omniplaneAfter = await app.getSliderValue('omniplane');
-
-    const somethingChanged = sAfter !== sBefore || omniplaneAfter !== omniplaneBefore;
-    expect(somethingChanged).toBe(true);
+    await expect.poll(() => app.getSliderValue('s')).toBe(LCTSC_ME_4C_POSE.s);
+    await expect.poll(() => app.getSliderValue('roll')).toBe(LCTSC_ME_4C_POSE.roll);
+    await expect.poll(() => app.getSliderValue('ante')).toBe(LCTSC_ME_4C_POSE.ante);
+    await expect.poll(() => app.getSliderValue('lateral')).toBe(LCTSC_ME_4C_POSE.lateral);
+    await expect.poll(() => app.getSliderValue('omniplane')).toBe(LCTSC_ME_4C_POSE.omniplane);
   });
 });

@@ -1,4 +1,4 @@
-import { type Page, type Locator } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Page-object model for the TeeSim application.
@@ -28,6 +28,7 @@ export class TeeSimPage {
 
   /* ---- Case selector ---- */
   readonly caseSelector: Locator;
+  readonly loadingIndicator: Locator;
 
   /* ---- View matching indicator ---- */
   readonly viewMatchIndicator: Locator;
@@ -70,6 +71,7 @@ export class TeeSimPage {
 
     /* Case selector */
     this.caseSelector = page.getByTestId('case-selector');
+    this.loadingIndicator = page.getByTestId('loading-indicator');
 
     /* View matching */
     this.viewMatchIndicator = page.getByTestId('view-match-indicator');
@@ -96,16 +98,39 @@ export class TeeSimPage {
 
   /** Navigate to the app root and wait for the shell to appear. */
   async goto() {
-    await this.page.goto('/');
-    /* Wait for the app shell to mount — look for any pane. */
+    await this.page.goto('/', { waitUntil: 'domcontentloaded' });
     await this.centerPane.waitFor({ state: 'visible', timeout: 30_000 });
+    await this.caseSelector.waitFor({ state: 'visible', timeout: 30_000 });
+    await expect(this.caseSelector).toBeEnabled({ timeout: 30_000 });
   }
 
   /** Navigate and also wait for a case to finish loading. */
   async gotoWithCaseLoaded() {
     await this.goto();
-    /* Wait for the 3D canvas to be present (case loaded). */
-    await this.threeDCanvas.waitFor({ state: 'visible', timeout: 30_000 });
+    await this.waitForLoadingToSettle();
+    await this.waitForCanvasReady(this.threeDCanvas);
+  }
+
+  async waitForLoadingToSettle(timeout = 45_000) {
+    await this.page.waitForFunction(
+      () => document.querySelector('[data-testid="loading-indicator"]') === null,
+      undefined,
+      { timeout },
+    );
+  }
+
+  async waitForCanvasReady(canvas: Locator, timeout = 45_000) {
+    await canvas.waitFor({ state: 'visible', timeout });
+    await expect(canvas).toHaveAttribute('data-render-state', 'ready', { timeout });
+  }
+
+  async focusShell() {
+    await this.centerPane.click({ position: { x: 16, y: 16 } });
+  }
+
+  async selectCase(title: string) {
+    await this.caseSelector.click();
+    await this.page.getByTestId('case-option').filter({ hasText: title }).click();
   }
 
   /* ---- Slider helpers ---- */
@@ -127,14 +152,25 @@ export class TeeSimPage {
     slider: Locator,
     deltaX: number,
   ) {
-    const box = await slider.boundingBox();
-    if (!box) throw new Error('Slider not visible');
-    const startX = box.x + box.width / 2;
-    const startY = box.y + box.height / 2;
-    await this.page.mouse.move(startX, startY);
-    await this.page.mouse.down();
-    await this.page.mouse.move(startX + deltaX, startY, { steps: 10 });
-    await this.page.mouse.up();
+    await slider.evaluate((element, direction) => {
+      if (!(element instanceof HTMLInputElement)) {
+        throw new Error('Slider is not an input element.');
+      }
+
+      const step = Number(element.step || 1);
+      const min = Number(element.min || 0);
+      const max = Number(element.max || 100);
+      const current = Number(element.value);
+      const increments = Math.max(1, Math.round(Math.abs(direction) / 10));
+      const nextValue = Math.min(
+        max,
+        Math.max(min, current + Math.sign(direction || 1) * step * increments),
+      );
+
+      element.value = String(nextValue);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    }, deltaX);
   }
 
   /* ---- Canvas inspection ---- */
@@ -145,6 +181,25 @@ export class TeeSimPage {
    */
   async canvasHasContent(canvas: Locator): Promise<boolean> {
     return canvas.evaluate((el: HTMLCanvasElement) => {
+      if (el.getAttribute('data-render-state') === 'ready') {
+        return true;
+      }
+
+      if (el.width === 0 || el.height === 0) {
+        return false;
+      }
+
+      try {
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = el.width;
+        blankCanvas.height = el.height;
+        if (el.toDataURL() !== blankCanvas.toDataURL()) {
+          return true;
+        }
+      } catch {
+        // Fall back to raw pixel inspection.
+      }
+
       const ctx = el.getContext('2d') || el.getContext('webgl2') || el.getContext('webgl');
       if (!ctx) return false;
 
