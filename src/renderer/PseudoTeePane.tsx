@@ -41,8 +41,11 @@ const DEFAULT_APPEARANCE: Required<PseudoTeeAppearance> = {
   outputSpacingMm: 0.6,
   sectorAngleDeg: 90,
   slabThicknessMm: 4,
-  windowHigh: 240,
-  windowLow: -180,
+  // Non-contrast CT: air ~-1000, lung ~-700, fat ~-100, blood ~30-50, myocardium ~50-80, bone >300
+  // Window: -200 to 300 (500 HU) shows soft tissue + some lung/bone context
+  // Inverted: high HU -> dark (like echo: blood=dark, tissue=bright)
+  windowHigh: 300,
+  windowLow: -200,
 };
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -102,7 +105,8 @@ const applySectorMask = (
       const depthNorm = clamp(axialDepthMm / Math.max(appearance.depthMm, 1), 0, 1);
       const angleNorm = clamp(angularOffset / Math.max(halfSectorRad, 1e-4), 0, 1);
       const radialNorm = clamp(radiusMm / Math.max(appearance.depthMm, 1), 0, 1);
-      const depthAttenuation = 0.9 * Math.exp(-1.18 * depthNorm) + 0.1;
+      // Gentler attenuation: -0.4 (was -1.18) preserves far-field anatomy visibility
+      const depthAttenuation = 0.85 * Math.exp(-0.4 * depthNorm) + 0.15;
       const edgeFeather = 1 - smoothstep(0.86, 1, Math.max(angleNorm, radialNorm));
       const nearFieldGate = smoothstep(
         appearance.nearFieldMm,
