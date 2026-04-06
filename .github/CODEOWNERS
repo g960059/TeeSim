@@ -1,0 +1,11 @@
+# Replace the placeholder owner before enabling required CODEOWNERS review.
+* @g960059
+
+/.github/ @g960059
+/README.md @g960059
+/CLAUDE.md @g960059
+/docs/product/ @g960059
+/docs/decisions/ @g960059
+/docs/runbooks/ @g960059
+/docs/research/ @g960059
+/changes/ @g960059

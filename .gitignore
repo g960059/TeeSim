@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+*.nii.gz
+*.nii
+*.dcm
+*.mha
+*.mhd
+*.nrrd
+build/
+.next/
+out/
+coverage/
+*.log
+.vite/

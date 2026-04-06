@@ -1,0 +1,30 @@
+name: Research
+description: Track investigation or comparison work that is not implementation yet.
+title: "[Research] "
+labels:
+  - research
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What needs to be understood?
+    validations:
+      required: true
+  - type: textarea
+    id: why_now
+    attributes:
+      label: Why now
+      description: What decision or risk makes this investigation necessary?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What to include and exclude.
+  - type: textarea
+    id: outputs
+    attributes:
+      label: Expected outputs
+      description: Research note, recommendation, benchmark, ADR input, etc.
