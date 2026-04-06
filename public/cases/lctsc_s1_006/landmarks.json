@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "coordinateSystem": "RAS",
+  "units": "mm",
+  "points": [
+    {
+      "id": "spinalcord-centroid",
+      "structureId": "spinalcord",
+      "position": [
+        11.4,
+        -138.3,
+        -482.7
+      ]
+    },
+    {
+      "id": "lung_r-centroid",
+      "structureId": "lung_r",
+      "position": [
+        -42.3,
+        -185.4,
+        -457.2
+      ]
+    },
+    {
+      "id": "lung_l-centroid",
+      "structureId": "lung_l",
+      "position": [
+        70.1,
+        -183.0,
+        -451.8
+      ]
+    },
+    {
+      "id": "heart-centroid",
+      "structureId": "heart",
+      "position": [
+        37.1,
+        -235.8,
+        -485.2
+      ]
+    },
+    {
+      "id": "esophagus-centroid",
+      "structureId": "esophagus",
+      "position": [
+        13.1,
+        -187.0,
+        -431.7
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {
+      "caseId": "stub_case_01",
+      "title": "Stub Normal Adult",
+      "description": "Synthetic stub for development"
+    },
+    {
+      "caseId": "lctsc_s1_006",
+      "title": "LCTSC S1-006 (Female, Thorax CT)",
+      "description": "Thorax CT with heart, esophagus, lung, spinal cord segmentation from LCTSC challenge"
+    }
+  ]
+}

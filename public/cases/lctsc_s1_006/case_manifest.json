@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "caseId": "lctsc_s1_006",
+  "caseVersion": "0.1.0",
+  "coordinateSystem": "RAS",
+  "units": "mm",
+  "bundleVersion": "0.1.0",
+  "generator": {
+    "pipelineVersion": "0.1.0",
+    "generatedAt": "2026-04-06T07:31:05.631878+00:00"
+  },
+  "sources": [
+    {
+      "dataset": "LCTSC (Lung CT Segmentation Challenge)",
+      "bucket": "maybe-verify-first",
+      "license": "TCIA Data Usage Policy",
+      "artifact": "LCTSC-Train-S1-006"
+    }
+  ],
+  "assets": {
+    "sceneGlb": {
+      "path": "scene.glb"
+    },
+    "heartDetailGlb": {
+      "path": "heart_detail.glb"
+    },
+    "heartRoiVti": {
+      "path": "heart_roi.vti"
+    }
+  },
+  "metadata": {
+    "landmarks": "landmarks.json",
+    "probePath": "probe_path.json",
+    "views": "views.json"
+  }
+}
