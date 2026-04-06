@@ -9,6 +9,7 @@ import {
   type Scene3DPaneHandle,
 } from './renderer';
 import { CaseSelector } from './ui/CaseSelector';
+import { ErrorBoundary } from './ui/ErrorBoundary';
 import { ProbeHUD } from './ui/ProbeHUD';
 import { ThreePaneLayout } from './ui/ThreePaneLayout';
 import { ViewMatchIndicator } from './ui/ViewMatchIndicator';
@@ -138,13 +139,15 @@ export default function App() {
 
             <MeasuredRendererSurface className="render-surface render-surface-left">
               {({ height, width }) => (
-                <PseudoTeePane
-                  appearance={{ slabThicknessMm: 4 }}
-                  height={height}
-                  ref={pseudoTeePaneRef}
-                  volume={volume}
-                  width={width}
-                />
+                <ErrorBoundary label="Pseudo-TEE">
+                  <PseudoTeePane
+                    appearance={{ slabThicknessMm: 4 }}
+                    height={height}
+                    ref={pseudoTeePaneRef}
+                    volume={volume}
+                    width={width}
+                  />
+                </ErrorBoundary>
               )}
             </MeasuredRendererSurface>
 
@@ -168,12 +171,14 @@ export default function App() {
 
             <MeasuredRendererSurface className="render-surface render-surface-center">
               {({ height, width }) => (
-                <Scene3DPane
-                  height={height}
-                  meshes={meshes}
-                  ref={scenePaneRef}
-                  width={width}
-                />
+                <ErrorBoundary label="3D Scene">
+                  <Scene3DPane
+                    height={height}
+                    meshes={meshes}
+                    ref={scenePaneRef}
+                    width={width}
+                  />
+                </ErrorBoundary>
               )}
             </MeasuredRendererSurface>
           </div>
@@ -187,12 +192,14 @@ export default function App() {
 
             <MeasuredRendererSurface className="render-surface render-surface-right">
               {({ height, width }) => (
-                <ObliqueSlicePane
-                  height={height}
-                  ref={obliquePaneRef}
-                  volume={volume}
-                  width={width}
-                />
+                <ErrorBoundary label="Oblique Slice">
+                  <ObliqueSlicePane
+                    height={height}
+                    ref={obliquePaneRef}
+                    volume={volume}
+                    width={width}
+                  />
+                </ErrorBoundary>
               )}
             </MeasuredRendererSurface>
 

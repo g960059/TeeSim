@@ -212,5 +212,9 @@ export const applyUserMatrix = (actor: VtkActor, matrixValues: readonly number[]
 };
 
 export const disposePipeline = (renderWindow?: VtkGenericRenderWindow | null): void => {
-  renderWindow?.delete();
+  try {
+    renderWindow?.delete();
+  } catch {
+    // VTK.js cleanup can fail if OpenGL resources were never initialized
+  }
 };

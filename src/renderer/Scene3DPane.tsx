@@ -213,12 +213,18 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
     probeActorRef.current = probeActor;
     placeholderActorRef.current = placeholderActor;
     renderWindowRef.current = renderWindow;
-    interactionSubscriptionRef.current = renderWindow
-      .getInteractor()
-      .onEndInteractionEvent(() => {
-        clampOrbitCamera(renderer);
-        renderWindow.getRenderWindow().render();
-      });
+    // onEndInteractionEvent may not exist at runtime in some vtk.js builds
+    try {
+      const interactor = renderWindow.getInteractor();
+      if (interactor && typeof interactor.onEndInteractionEvent === 'function') {
+        interactionSubscriptionRef.current = interactor.onEndInteractionEvent(() => {
+          clampOrbitCamera(renderer);
+          renderWindow.getRenderWindow().render();
+        });
+      }
+    } catch {
+      // Gracefully degrade: orbit camera clamping won't auto-trigger after interaction
+    }
 
     resetCamera(true);
     flush();
