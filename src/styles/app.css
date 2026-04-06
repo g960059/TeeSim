@@ -221,6 +221,7 @@ button {
 
 .render-viewport {
   height: 100%;
+  overflow: hidden;
   position: relative;
   width: 100%;
   z-index: 1;

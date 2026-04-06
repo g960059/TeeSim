@@ -269,10 +269,12 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
     <div
       ref={containerRef}
       style={{
-        height,
+        height: '100%',
+        maxHeight: height,
+        maxWidth: width,
         overflow: 'hidden',
         position: 'relative',
-        width,
+        width: '100%',
       }}
     />
   );

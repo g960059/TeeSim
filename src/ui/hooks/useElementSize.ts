@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useLayoutEffect, useState, type RefObject } from 'react';
 
 interface ElementSize {
   width: number;
@@ -8,24 +8,29 @@ interface ElementSize {
 export function useElementSize<T extends HTMLElement>(ref: RefObject<T | null>): ElementSize {
   const [size, setSize] = useState<ElementSize>({ height: 0, width: 0 });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element) {
       return;
     }
 
     const updateSize = (): void => {
-      setSize({
+      const next = {
         height: element.clientHeight,
         width: element.clientWidth,
-      });
+      };
+
+      // Only update state if dimensions actually changed — prevents
+      // feedback loops where VTK.js canvas resize triggers ResizeObserver
+      // which triggers re-render which triggers canvas resize...
+      setSize((prev) =>
+        prev.width === next.width && prev.height === next.height ? prev : next,
+      );
     };
 
     updateSize();
 
-    const observer = new ResizeObserver(() => {
-      updateSize();
-    });
+    const observer = new ResizeObserver(updateSize);
     observer.observe(element);
 
     return () => {

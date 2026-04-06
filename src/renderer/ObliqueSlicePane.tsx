@@ -237,9 +237,12 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
     return (
       <div
         style={{
-          height,
+          height: '100%',
+          maxHeight: height,
+          maxWidth: width,
+          overflow: 'hidden',
           position: 'relative',
-          width,
+          width: '100%',
         }}
       >
         <div
