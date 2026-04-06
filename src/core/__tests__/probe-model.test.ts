@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { vec3 } from '../math';
 import {
@@ -39,6 +41,48 @@ const straightPath: CenterlinePath = {
   stations: [{ id: 'ME', sRange: [0, 100] }],
   units: 'mm',
 };
+
+const publicCasePath = path.resolve(
+  process.cwd(),
+  'public/cases/0.1.0/lctsc_s1_006/probe_path.json',
+);
+
+const publicProbePathAsset = JSON.parse(fs.readFileSync(publicCasePath, 'utf8')) as {
+  coordinateSystem?: string;
+  sampleSpacingMm?: number;
+  units?: 'mm';
+  points: [number, number, number][];
+  arcLengthMm: number[];
+  frames: {
+    tangent: [number, number, number];
+    normal: [number, number, number];
+    binormal: [number, number, number];
+  }[];
+  stations?: { id: string; sRangeMm?: readonly [number, number]; sRange?: readonly [number, number] }[];
+};
+
+const publicProbePath: CenterlinePath = {
+  coordinateSystem: publicProbePathAsset.coordinateSystem,
+  sampleSpacingMm: publicProbePathAsset.sampleSpacingMm,
+  units: publicProbePathAsset.units,
+  stations: publicProbePathAsset.stations?.map((station) => ({
+    id: station.id,
+    sRange: station.sRange ?? station.sRangeMm ?? [0, 0],
+  })),
+  points: publicProbePathAsset.points.map((position, index) => ({
+    position,
+    arcLengthMm: publicProbePathAsset.arcLengthMm[index],
+    tangent: publicProbePathAsset.frames[index].tangent,
+    normal: publicProbePathAsset.frames[index].normal,
+    binormal: publicProbePathAsset.frames[index].binormal,
+  })),
+};
+
+const dotClamped = (a: readonly number[], b: readonly number[]): number =>
+  Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
+
+const angleBetweenDeg = (a: readonly number[], b: readonly number[]): number =>
+  (Math.acos(dotClamped(a, b)) * 180) / Math.PI;
 
 // TODO(core-fixtures): Replace the synthetic straight-path fixture with a curved authored
 // probe_path sample once bundle assets exist, so parallel-transport interpolation is checked
@@ -143,9 +187,14 @@ describe('imaging plane', () => {
     expect(plane.origin[0]).toBeCloseTo(0, 6);
     expect(plane.origin[1]).toBeCloseTo(0, 6);
     expect(plane.origin[2]).toBeCloseTo(75, 6);
-    expect(plane.up).toEqual([0, 0, 1]);
-    expect(plane.right[0]).toBeCloseTo(0, 6);
-    expect(plane.right[1]).toBeCloseTo(1, 6);
+    expect(plane.right).toEqual([0, 0, 1]);
+    expect(plane.up[0]).toBeCloseTo(0, 6);
+    expect(plane.up[1]).toBeCloseTo(1, 6);
+    expect(plane.normal[0]).toBeCloseTo(-1, 6);
+    expect(vec3.dot(plane.right, plane.up)).toBeCloseTo(0, 8);
+    expect(vec3.dot(plane.right, plane.normal)).toBeCloseTo(0, 8);
+    expect(vec3.dot(plane.up, plane.normal)).toBeCloseTo(0, 8);
+    expect(vec3.dot(vec3.cross(plane.right, plane.up), plane.normal)).toBeCloseTo(1, 8);
   });
 
   it('returns the full transducer transform at the rolled tip frame', () => {
@@ -157,5 +206,31 @@ describe('imaging plane', () => {
     expect(xAxisPoint[0]).toBeCloseTo(1, 6);
     expect(xAxisPoint[1]).toBeCloseTo(0, 6);
     expect(xAxisPoint[2]).toBeCloseTo(75, 6);
+  });
+
+  it('produces meaningfully different imaging planes for different omniplane presets on the public case', () => {
+    const fourChamber = computeImagingPlane(publicProbePath, {
+      sMm: 97,
+      rollDeg: 0,
+      anteDeg: -5,
+      lateralDeg: 0,
+      omniplaneDeg: 0,
+    });
+    const twoChamber = computeImagingPlane(publicProbePath, {
+      sMm: 97,
+      rollDeg: 0,
+      anteDeg: -5,
+      lateralDeg: 0,
+      omniplaneDeg: 65,
+    });
+
+    expect(fourChamber.origin[0]).toBeCloseTo(twoChamber.origin[0], 6);
+    expect(fourChamber.origin[1]).toBeCloseTo(twoChamber.origin[1], 6);
+    expect(fourChamber.origin[2]).toBeCloseTo(twoChamber.origin[2], 6);
+    expect(angleBetweenDeg(fourChamber.up, twoChamber.up)).toBeGreaterThan(50);
+    expect(angleBetweenDeg(fourChamber.normal, twoChamber.normal)).toBeGreaterThan(50);
+    expect(vec3.dot(fourChamber.right, twoChamber.right)).toBeCloseTo(1, 6);
+    expect(vec3.dot(vec3.cross(fourChamber.right, fourChamber.up), fourChamber.normal)).toBeCloseTo(1, 6);
+    expect(vec3.dot(vec3.cross(twoChamber.right, twoChamber.up), twoChamber.normal)).toBeCloseTo(1, 6);
   });
 });
