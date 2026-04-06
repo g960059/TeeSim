@@ -1,0 +1,74 @@
+[
+  {
+    "id": "me-4c",
+    "label": "ME 4C",
+    "aseCode": "ME Four-Chamber",
+    "station": "ME",
+    "probePose": { "sMm": 118, "rollDeg": 0, "anteDeg": -8, "lateralDeg": 0, "omniplaneDeg": 0 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 140, "anteDeg": 80, "lateralDeg": 60, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "me-2c",
+    "label": "ME 2C",
+    "aseCode": "ME Two-Chamber",
+    "station": "ME",
+    "probePose": { "sMm": 120, "rollDeg": 0, "anteDeg": -6, "lateralDeg": 0, "omniplaneDeg": 65 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 140, "anteDeg": 80, "lateralDeg": 60, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "me-lax",
+    "label": "ME LAX",
+    "aseCode": "ME Long-Axis",
+    "station": "ME",
+    "probePose": { "sMm": 122, "rollDeg": 2, "anteDeg": -4, "lateralDeg": 0, "omniplaneDeg": 132 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 140, "anteDeg": 80, "lateralDeg": 60, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "tg-sax",
+    "label": "TG SAX",
+    "aseCode": "TG Mid Short-Axis",
+    "station": "TG",
+    "probePose": { "sMm": 214, "rollDeg": 0, "anteDeg": 34, "lateralDeg": 0, "omniplaneDeg": 12 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 110, "rollDeg": 140, "anteDeg": 90, "lateralDeg": 60, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "me-av-sax",
+    "label": "ME AV SAX",
+    "aseCode": "ME AV Short-Axis",
+    "station": "ME",
+    "probePose": { "sMm": 110, "rollDeg": 4, "anteDeg": -2, "lateralDeg": 0, "omniplaneDeg": 38 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 140, "anteDeg": 80, "lateralDeg": 60, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "me-av-lax",
+    "label": "ME AV LAX",
+    "aseCode": "ME AV Long-Axis",
+    "station": "ME",
+    "probePose": { "sMm": 112, "rollDeg": 4, "anteDeg": -2, "lateralDeg": 0, "omniplaneDeg": 126 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 140, "anteDeg": 80, "lateralDeg": 60, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "me-rv-io",
+    "label": "ME RV I-O",
+    "aseCode": "ME RV Inflow-Outflow",
+    "station": "ME",
+    "probePose": { "sMm": 128, "rollDeg": 18, "anteDeg": 10, "lateralDeg": 20, "omniplaneDeg": 58 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 150, "anteDeg": 90, "lateralDeg": 70, "omniplaneDeg": 120 }
+  },
+  {
+    "id": "me-bicaval",
+    "label": "ME Bicaval",
+    "aseCode": "ME Bicaval",
+    "station": "ME",
+    "probePose": { "sMm": 126, "rollDeg": 74, "anteDeg": -4, "lateralDeg": 12, "omniplaneDeg": 96 },
+    "validation": { "approvedBy": null, "approvedAt": null, "status": "pending" },
+    "ranges": { "sMm": 100, "rollDeg": 150, "anteDeg": 90, "lateralDeg": 70, "omniplaneDeg": 120 }
+  }
+]

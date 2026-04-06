@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0.0",
+  "coordinateSystem": "RAS",
+  "units": "mm",
+  "sampleSpacingMm": 40,
+  "stations": [
+    { "id": "UE", "sRange": [0, 80] },
+    { "id": "ME", "sRange": [80, 180] },
+    { "id": "TG", "sRange": [180, 260] },
+    { "id": "DTG", "sRange": [260, 320] }
+  ],
+  "points": [
+    {
+      "position": [0, -100, 160],
+      "arcLengthMm": 0,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, 120],
+      "arcLengthMm": 40,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, 80],
+      "arcLengthMm": 80,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, 40],
+      "arcLengthMm": 120,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, 0],
+      "arcLengthMm": 160,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, -40],
+      "arcLengthMm": 200,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, -80],
+      "arcLengthMm": 240,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, -120],
+      "arcLengthMm": 280,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    },
+    {
+      "position": [0, -100, -160],
+      "arcLengthMm": 320,
+      "tangent": [0, 0, -1],
+      "normal": [1, 0, 0],
+      "binormal": [0, -1, 0]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "caseId": "ts-001",
+  "caseVersion": "0.1.0",
+  "bundleVersion": "0.1.0",
+  "coordinateSystem": "RAS",
+  "units": "mm",
+  "worldFromImage": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  "worldFromMesh": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  "generator": {
+    "pipelineVersion": "0.1.0",
+    "gitCommit": "wave2-review",
+    "generatedAt": "2026-04-06T00:00:00Z"
+  },
+  "sources": [
+    {
+      "dataset": "TotalSegmentator CT",
+      "bucket": "bundle-safe-open",
+      "license": "CC BY 4.0",
+      "artifact": "ts-001"
+    }
+  ],
+  "structures": [
+    "Left ventricle",
+    "Right ventricle",
+    "Left atrium",
+    "Right atrium",
+    "Mitral valve",
+    "Aortic valve"
+  ],
+  "assets": {},
+  "metadata": {
+    "probePath": "probe_path.json",
+    "views": "views.json"
+  }
+}

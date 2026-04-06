@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "id": "ts-001",
+      "title": "TotalSegmentator CT 001",
+      "description": "Stub bundle-safe case used to wire the MVP app shell and UI controls.",
+      "bundleVersion": "0.1.0",
+      "caseVersion": "0.1.0",
+      "structures": [
+        "Left ventricle",
+        "Right ventricle",
+        "Left atrium",
+        "Right atrium",
+        "Mitral valve",
+        "Aortic valve"
+      ]
+    }
+  ]
+}
