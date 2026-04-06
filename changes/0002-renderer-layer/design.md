@@ -11,8 +11,10 @@ The pseudo-TEE and oblique panes both use `vtkImageReslice`. The pseudo-TEE pane
 - Changes:
   - new `src/renderer/` module
   - new change pack for renderer implementation
+  - `src/core/probe-model.ts` imaging-plane basis fix so reslice depth follows the beam direction
+  - regression tests for public case assets and probe-plane geometry
+  - dated renderer diagnosis note in `docs/research/`
 - Stays unchanged:
-  - `src/core/`
   - `src/ui/`
   - `spike/`
   - `index.html`
