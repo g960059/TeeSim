@@ -225,7 +225,7 @@ def export_vti(ct_image: sitk.Image, masks: dict, output_path: str, roi_center: 
     print(f"  Exported {output_path}: {size_mb:.1f} MB, dims={arr.shape}")
 
 
-def generate_probe_path(esophagus_mask: sitk.Image) -> dict:
+def generate_probe_path(esophagus_mask: sitk.Image, heart_center: np.ndarray | None = None) -> dict:
     """Generate esophageal centerline from esophagus segmentation."""
     arr = sitk.GetArrayFromImage(esophagus_mask)
     spacing = esophagus_mask.GetSpacing()
@@ -273,14 +273,27 @@ def generate_probe_path(esophagus_mask: sitk.Image) -> dict:
     tangents = np.gradient(resampled, axis=0)
     tangents = tangents / np.linalg.norm(tangents, axis=1, keepdims=True)
 
-    # Initial normal: perpendicular to first tangent
+    # Initial normal: point toward the heart center (anterior from esophagus).
+    # In TEE, the beam fires anteriorly from the esophagus into the heart.
+    # We compute the direction from the mid-path point to the heart centroid,
+    # project it perpendicular to the tangent, and use that as the initial normal.
     t0 = tangents[0]
-    up = np.array([0, 0, 1])
-    n0 = np.cross(t0, up)
-    if np.linalg.norm(n0) < 1e-6:
-        up = np.array([0, 1, 0])
-        n0 = np.cross(t0, up)
-    n0 = n0 / np.linalg.norm(n0)
+    mid_idx = len(resampled) // 2
+    mid_pt = resampled[mid_idx]
+
+    # Heart center passed via the masks; use a fallback if not available
+    if heart_center is not None:
+        heart_dir = heart_center - mid_pt
+    else:
+        # Fallback: assume heart is anterior (negative Y in LPS / this dataset)
+        heart_dir = np.array([0, -1, 0])
+
+    # Project heart direction perpendicular to tangent
+    heart_dir = heart_dir - np.dot(heart_dir, t0) * t0
+    if np.linalg.norm(heart_dir) < 1e-6:
+        heart_dir = np.array([0, -1, 0])  # fallback anterior
+        heart_dir = heart_dir - np.dot(heart_dir, t0) * t0
+    n0 = heart_dir / np.linalg.norm(heart_dir)
 
     normals = [n0]
     binormals = [np.cross(t0, n0)]
@@ -302,6 +315,20 @@ def generate_probe_path(esophagus_mask: sitk.Image) -> dict:
 
     normals = np.array(normals)
     binormals = np.array(binormals)
+
+    # Re-orient normals to consistently point toward the heart at every sample.
+    # Parallel transport preserves smoothness but can drift away from the heart
+    # due to centerline curvature. We flip the normal at each point if it faces
+    # away from the heart center.
+    if heart_center is not None:
+        for i in range(len(normals)):
+            to_heart = heart_center - resampled[i]
+            to_heart_perp = to_heart - np.dot(to_heart, tangents[i]) * tangents[i]
+            if np.linalg.norm(to_heart_perp) > 1e-6:
+                to_heart_perp = to_heart_perp / np.linalg.norm(to_heart_perp)
+                if np.dot(normals[i], to_heart_perp) < 0:
+                    normals[i] = -normals[i]
+                    binormals[i] = -binormals[i]
 
     # Define stations based on path length fractions
     total = target_s[-1]
@@ -553,7 +580,7 @@ def main():
     print("6. Generating probe path...")
     esophagus_mask = masks.get('esophagus')
     if esophagus_mask is not None:
-        probe_path = generate_probe_path(esophagus_mask)
+        probe_path = generate_probe_path(esophagus_mask, heart_center=np.array(heart_center))
     else:
         print("  No esophagus mask, generating synthetic path")
         probe_path = generate_synthetic_probe_path(
