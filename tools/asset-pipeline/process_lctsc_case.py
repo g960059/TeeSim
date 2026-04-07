@@ -399,27 +399,21 @@ def generate_probe_path(esophagus_mask: sitk.Image, heart_center: np.ndarray | N
     tangents = np.gradient(resampled, axis=0)
     tangents = tangents / np.linalg.norm(tangents, axis=1, keepdims=True)
 
-    # Initial normal: point toward the heart center (anterior from esophagus).
-    # In TEE, the beam fires anteriorly from the esophagus into the heart.
-    # We compute the direction from the mid-path point to the heart centroid,
-    # project it perpendicular to the tangent, and use that as the initial normal.
+    # Initial normal: anatomical anterior direction.
+    # In the patient coordinate system (LPS from SimpleITK), anterior = -Y.
+    # The TEE transducer face always points anteriorly (toward the patient's chest).
+    # We do NOT use the heart center — the probe can look at descending aorta
+    # (posterior) by using shaft rotation (roll), not by flipping the normal.
     t0 = tangents[0]
-    mid_idx = len(resampled) // 2
-    mid_pt = resampled[mid_idx]
+    anterior_dir = np.array([0, -1, 0])  # anatomical anterior in LPS
 
-    # Heart center passed via the masks; use a fallback if not available
-    if heart_center is not None:
-        heart_dir = heart_center - mid_pt
-    else:
-        # Fallback: assume heart is anterior (negative Y in LPS / this dataset)
-        heart_dir = np.array([0, -1, 0])
-
-    # Project heart direction perpendicular to tangent
-    heart_dir = heart_dir - np.dot(heart_dir, t0) * t0
-    if np.linalg.norm(heart_dir) < 1e-6:
-        heart_dir = np.array([0, -1, 0])  # fallback anterior
-        heart_dir = heart_dir - np.dot(heart_dir, t0) * t0
-    n0 = heart_dir / np.linalg.norm(heart_dir)
+    # Project anterior onto perpendicular to tangent
+    ant_perp = anterior_dir - np.dot(anterior_dir, t0) * t0
+    if np.linalg.norm(ant_perp) < 1e-6:
+        # Tangent is nearly aligned with Y — use X as fallback
+        ant_perp = np.array([1, 0, 0])
+        ant_perp = ant_perp - np.dot(ant_perp, t0) * t0
+    n0 = ant_perp / np.linalg.norm(ant_perp)
 
     normals = [n0]
     binormals = [np.cross(t0, n0)]
@@ -442,19 +436,30 @@ def generate_probe_path(esophagus_mask: sitk.Image, heart_center: np.ndarray | N
     normals = np.array(normals)
     binormals = np.array(binormals)
 
-    # Re-orient normals to consistently point toward the heart at every sample.
-    # Parallel transport preserves smoothness but can drift away from the heart
-    # due to centerline curvature. We flip the normal at each point if it faces
-    # away from the heart center.
-    if heart_center is not None:
-        for i in range(len(normals)):
-            to_heart = heart_center - resampled[i]
-            to_heart_perp = to_heart - np.dot(to_heart, tangents[i]) * tangents[i]
-            if np.linalg.norm(to_heart_perp) > 1e-6:
-                to_heart_perp = to_heart_perp / np.linalg.norm(to_heart_perp)
-                if np.dot(normals[i], to_heart_perp) < 0:
-                    normals[i] = -normals[i]
-                    binormals[i] = -binormals[i]
+    # Ensure continuous normal orientation along the path.
+    # Parallel transport is smooth but can accumulate sign flips.
+    # We propagate: if frame i's normal flips relative to i-1, flip it back.
+    # The initial frame was set to anatomical anterior, so propagation
+    # maintains anterior-facing throughout without heart-center dependency.
+    for i in range(1, len(normals)):
+        if np.dot(normals[i], normals[i - 1]) < 0:
+            normals[i] = -normals[i]
+            binormals[i] = -binormals[i]
+
+    # Verify: smooth centerline by additional spline smoothing of normals
+    # to reduce abrupt tangent changes (e.g., near GEJ)
+    from scipy.ndimage import uniform_filter1d
+    for axis in range(3):
+        normals[:, axis] = uniform_filter1d(normals[:, axis], size=5)
+    # Re-normalize after smoothing
+    norms = np.linalg.norm(normals, axis=1, keepdims=True)
+    norms[norms < 1e-8] = 1
+    normals = normals / norms
+    # Recompute binormals from smoothed normals
+    binormals = np.cross(tangents, normals)
+    bin_norms = np.linalg.norm(binormals, axis=1, keepdims=True)
+    bin_norms[bin_norms < 1e-8] = 1
+    binormals = binormals / bin_norms
 
     # Define stations based on path length fractions
     total = target_s[-1]

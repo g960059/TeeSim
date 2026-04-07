@@ -1,4 +1,4 @@
-import { getStationLabel, PROBE_LIMITS, useTeeSimStore } from '../store';
+import { getStationLabel, PROBE_LIMITS, PSEUDO_TEE_LIMITS, useTeeSimStore } from '../store';
 
 interface SliderControl {
   key: 'sMm' | 'rollDeg' | 'anteDeg' | 'lateralDeg' | 'omniplaneDeg';
@@ -75,6 +75,8 @@ const formatSliderValue = (key: SliderControl['displayKey'], value: number): str
 export function ProbeHUD() {
   const probe = useTeeSimStore((state) => state.probe);
   const setProbe = useTeeSimStore((state) => state.probe.setProbe);
+  const depthMm = useTeeSimStore((state) => state.ui.depthMm);
+  const setDepthMm = useTeeSimStore((state) => state.ui.setDepthMm);
   const station = getStationLabel(probe.sMm);
 
   return (
@@ -116,6 +118,25 @@ export function ProbeHUD() {
             />
           </label>
         ))}
+
+        <label className="slider-row" key="depthMm">
+          <div className="slider-meta">
+            <span>Depth (cm)</span>
+            <span data-testid="slider-value-depth">{(depthMm / 10).toFixed(0)}</span>
+          </div>
+          <input
+            className="slider-input"
+            data-testid="slider-depth"
+            max={PSEUDO_TEE_LIMITS.depthMm.max}
+            min={PSEUDO_TEE_LIMITS.depthMm.min}
+            onChange={(event) => {
+              setDepthMm(Number(event.currentTarget.value));
+            }}
+            step={PSEUDO_TEE_LIMITS.depthMm.step}
+            type="range"
+            value={depthMm}
+          />
+        </label>
       </div>
     </section>
   );

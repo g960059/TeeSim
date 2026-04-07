@@ -38,8 +38,10 @@ interface ViewMatchSlice {
 }
 
 interface UiSlice {
+  depthMm: number;
   labelsVisible: boolean;
   selectedPanel: SelectedPanel;
+  setDepthMm: (depthMm: number) => void;
   setSelectedPanel: (panel: SelectedPanel) => void;
   toggleLabelsVisible: () => void;
 }
@@ -140,6 +142,10 @@ export const PROBE_LIMITS = {
   omniplaneDeg: { min: 0, max: 180, step: 1, keyboardStep: 5 },
 } as const;
 
+export const PSEUDO_TEE_LIMITS = {
+  depthMm: { min: 40, max: 200, step: 10 },
+} as const;
+
 const DEFAULT_PROBE_POSE: ProbePose = {
   sMm: 92,
   rollDeg: 0,
@@ -147,6 +153,7 @@ const DEFAULT_PROBE_POSE: ProbePose = {
   lateralDeg: 0,
   omniplaneDeg: 25,
 };
+const DEFAULT_DEPTH_MM = 140;
 
 let caseLoadRequestToken = 0;
 
@@ -351,8 +358,16 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
     },
     viewMatch: initialViewMatch,
     ui: {
+      depthMm: DEFAULT_DEPTH_MM,
       labelsVisible: true,
       selectedPanel: 'center',
+      setDepthMm: (depthMm) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            depthMm: clamp(depthMm, PSEUDO_TEE_LIMITS.depthMm.min, PSEUDO_TEE_LIMITS.depthMm.max),
+          },
+        })),
       setSelectedPanel: (panel) =>
         set((state) => ({
           ui: {

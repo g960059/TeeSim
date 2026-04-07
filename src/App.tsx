@@ -58,6 +58,7 @@ export default function App() {
   const structures = useTeeSimStore((state) => state.scene.structures);
   const loadCaseIndex = useTeeSimStore((state) => state.scene.loadCaseIndex);
   const loadCase = useTeeSimStore((state) => state.scene.loadCase);
+  const depthMm = useTeeSimStore((state) => state.ui.depthMm);
   const labelsVisible = useTeeSimStore((state) => state.ui.labelsVisible);
   const toggleLabelsVisible = useTeeSimStore((state) => state.ui.toggleLabelsVisible);
   const selectedPanel = useTeeSimStore((state) => state.ui.selectedPanel);
@@ -145,7 +146,7 @@ export default function App() {
               {({ height, width }) => (
                 <ErrorBoundary label="Pseudo-TEE">
                   <PseudoTeePane
-                    appearance={{ slabThicknessMm: 4 }}
+                    appearance={{ depthMm, slabThicknessMm: 4 }}
                     height={height}
                     labelVolume={labelVolume}
                     labelsVisible={labelsVisible}

@@ -309,13 +309,11 @@ export const computeImagingPlane = (
 ): ImagingPlane => {
   const transducerFrame = getTransducerFrame(path, pose, options);
   const omniplaneRad = degToRad(pose.omniplaneDeg);
-  // The TEE scan plane rotates about the probe shaft, but image depth should follow the
-  // side-firing beam direction rather than the shaft tangent itself.
-  const beamDirection = vec3.normalize(
-    rotateVectorAroundAxis(transducerFrame.normal, transducerFrame.tangent, omniplaneRad),
+  const up = transducerFrame.normal;
+  // ASE omniplane conventions sweep from transverse (binormal) toward longitudinal (-tangent).
+  const right = vec3.normalize(
+    rotateVectorAroundAxis(transducerFrame.binormal, transducerFrame.normal, -omniplaneRad),
   );
-  const right = transducerFrame.tangent;
-  const up = beamDirection;
   const normal = vec3.normalize(vec3.cross(right, up));
 
   return {

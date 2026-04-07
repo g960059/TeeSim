@@ -178,19 +178,27 @@ describe('imaging plane', () => {
     rollDeg: 0,
     anteDeg: 0,
     lateralDeg: 0,
-    omniplaneDeg: 90,
+    omniplaneDeg: 0,
   };
 
   it('places the transducer origin proximally from the bent tip', () => {
-    const plane = computeImagingPlane(straightPath, basePose);
+    const plane = computeImagingPlane(straightPath, {
+      ...basePose,
+      omniplaneDeg: 90,
+    });
 
     expect(plane.origin[0]).toBeCloseTo(0, 6);
     expect(plane.origin[1]).toBeCloseTo(0, 6);
     expect(plane.origin[2]).toBeCloseTo(75, 6);
-    expect(plane.right).toEqual([0, 0, 1]);
-    expect(plane.up[0]).toBeCloseTo(0, 6);
-    expect(plane.up[1]).toBeCloseTo(1, 6);
-    expect(plane.normal[0]).toBeCloseTo(-1, 6);
+    expect(plane.right[0]).toBeCloseTo(0, 6);
+    expect(plane.right[1]).toBeCloseTo(0, 6);
+    expect(plane.right[2]).toBeCloseTo(-1, 6);
+    expect(plane.up[0]).toBeCloseTo(1, 6);
+    expect(plane.up[1]).toBeCloseTo(0, 6);
+    expect(plane.up[2]).toBeCloseTo(0, 6);
+    expect(plane.normal[0]).toBeCloseTo(0, 6);
+    expect(plane.normal[1]).toBeCloseTo(-1, 6);
+    expect(plane.normal[2]).toBeCloseTo(0, 6);
     expect(vec3.dot(plane.right, plane.up)).toBeCloseTo(0, 8);
     expect(vec3.dot(plane.right, plane.normal)).toBeCloseTo(0, 8);
     expect(vec3.dot(plane.up, plane.normal)).toBeCloseTo(0, 8);
@@ -227,10 +235,31 @@ describe('imaging plane', () => {
     expect(fourChamber.origin[0]).toBeCloseTo(twoChamber.origin[0], 6);
     expect(fourChamber.origin[1]).toBeCloseTo(twoChamber.origin[1], 6);
     expect(fourChamber.origin[2]).toBeCloseTo(twoChamber.origin[2], 6);
-    expect(angleBetweenDeg(fourChamber.up, twoChamber.up)).toBeGreaterThan(50);
+    expect(angleBetweenDeg(fourChamber.up, twoChamber.up)).toBeLessThan(1);
+    expect(angleBetweenDeg(fourChamber.right, twoChamber.right)).toBeGreaterThan(50);
     expect(angleBetweenDeg(fourChamber.normal, twoChamber.normal)).toBeGreaterThan(50);
-    expect(vec3.dot(fourChamber.right, twoChamber.right)).toBeCloseTo(1, 6);
     expect(vec3.dot(vec3.cross(fourChamber.right, fourChamber.up), fourChamber.normal)).toBeCloseTo(1, 6);
     expect(vec3.dot(vec3.cross(twoChamber.right, twoChamber.up), twoChamber.normal)).toBeCloseTo(1, 6);
+  });
+
+  it('keeps the beam fixed while rotating the scan line with omniplane', () => {
+    const transverse = computeImagingPlane(straightPath, {
+      ...basePose,
+      omniplaneDeg: 0,
+    });
+    const longitudinal = computeImagingPlane(straightPath, {
+      ...basePose,
+      omniplaneDeg: 90,
+    });
+
+    expect(transverse.up[0]).toBeCloseTo(longitudinal.up[0], 6);
+    expect(transverse.up[1]).toBeCloseTo(longitudinal.up[1], 6);
+    expect(transverse.up[2]).toBeCloseTo(longitudinal.up[2], 6);
+    expect(transverse.right[0]).toBeCloseTo(0, 6);
+    expect(transverse.right[1]).toBeCloseTo(1, 6);
+    expect(transverse.right[2]).toBeCloseTo(0, 6);
+    expect(longitudinal.right[0]).toBeCloseTo(0, 6);
+    expect(longitudinal.right[1]).toBeCloseTo(0, 6);
+    expect(longitudinal.right[2]).toBeCloseTo(-1, 6);
   });
 });

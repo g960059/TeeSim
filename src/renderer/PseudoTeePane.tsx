@@ -48,7 +48,7 @@ type PaneState = {
 };
 
 const DEFAULT_APPEARANCE: Required<PseudoTeeAppearance> = {
-  depthMm: 150,
+  depthMm: 140,
   nearFieldMm: 4,
   outputSpacingMm: 0.6,
   sectorAngleDeg: 90,
