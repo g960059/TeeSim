@@ -10,6 +10,7 @@ import vtkImageReslice from '@kitware/vtk.js/Imaging/Core/ImageReslice.js';
 import { InterpolationMode } from '@kitware/vtk.js/Imaging/Core/AbstractImageInterpolator/Constants.js';
 import { SlabMode } from '@kitware/vtk.js/Imaging/Core/ImageReslice/Constants.js';
 import type { vtkImageData as VtkImageData } from '@kitware/vtk.js/Common/DataModel/ImageData';
+import { getLabelColor, LABEL_OVERLAY_ALPHA } from './label-colors';
 import type { ObliqueSlicePaneHandle, ObliqueSlicePaneProps } from './types';
 import {
   buildResliceAxes,
@@ -22,6 +23,8 @@ import {
 type PaneState = {
   height: number;
   imagingPlane?: ObliqueSlicePaneProps['imagingPlane'];
+  labelVolume?: VtkImageData | null;
+  labelsVisible?: boolean;
   volume?: VtkImageData | null;
   width: number;
 };
@@ -30,6 +33,15 @@ type BlankImageRuntime = {
   heightPx: number;
   image: VtkImageData;
   spacingMm: number;
+  widthPx: number;
+};
+
+type OverlayRuntime = {
+  heightPx: number;
+  image: VtkImageData;
+  scalars: vtkDataArray;
+  spacingMm: number;
+  values: Uint8Array;
   widthPx: number;
 };
 
@@ -54,17 +66,26 @@ const createCtTransferFunctions = (): {
 };
 
 export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSlicePaneProps>(
-  function ObliqueSlicePane({ height, imagingPlane, volume, width }, ref) {
+  function ObliqueSlicePane(
+    { height, imagingPlane, labelVolume, labelsVisible, volume, width },
+    ref,
+  ) {
     const [isLoading, setIsLoading] = useState(true);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const renderWindowRef = useRef<ReturnType<typeof createRenderWindow> | null>(null);
     const imageSliceRef = useRef<ReturnType<typeof vtkImageSlice.newInstance> | null>(null);
+    const labelOverlaySliceRef = useRef<ReturnType<typeof vtkImageSlice.newInstance> | null>(null);
     const mapperRef = useRef<ReturnType<typeof vtkImageMapper.newInstance> | null>(null);
+    const labelOverlayMapperRef = useRef<ReturnType<typeof vtkImageMapper.newInstance> | null>(null);
     const resliceRef = useRef<ReturnType<typeof vtkImageReslice.newInstance> | null>(null);
+    const labelResliceRef = useRef<ReturnType<typeof vtkImageReslice.newInstance> | null>(null);
     const blankImageRef = useRef<BlankImageRuntime | null>(null);
+    const overlayRuntimeRef = useRef<OverlayRuntime | null>(null);
     const latestStateRef = useRef<PaneState>({
       height,
       imagingPlane,
+      labelVolume,
+      labelsVisible,
       volume,
       width,
     });
@@ -120,12 +141,86 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       return runtime;
     };
 
+    const ensureOverlayRuntime = (
+      widthPx: number,
+      heightPx: number,
+      spacingMm: number,
+    ): OverlayRuntime => {
+      const existing = overlayRuntimeRef.current;
+      if (
+        existing &&
+        existing.widthPx === widthPx &&
+        existing.heightPx === heightPx &&
+        existing.spacingMm === spacingMm
+      ) {
+        return existing;
+      }
+
+      const image = vtkImageData.newInstance({
+        extent: [0, widthPx - 1, 0, heightPx - 1, 0, 0],
+        origin: [-(widthPx * spacingMm) / 2, 0, 0],
+        spacing: [spacingMm, spacingMm, 1],
+      });
+      const scalars = vtkDataArray.newInstance({
+        dataType: 'Uint8Array',
+        name: 'ObliqueSliceLabelOverlay',
+        numberOfComponents: 4,
+        values: new Uint8Array(widthPx * heightPx * 4),
+      });
+
+      image.getPointData().setScalars(scalars);
+      image.modified();
+
+      const runtime: OverlayRuntime = {
+        heightPx,
+        image,
+        scalars,
+        spacingMm,
+        values: scalars.getData() as Uint8Array,
+        widthPx,
+      };
+
+      overlayRuntimeRef.current = runtime;
+      labelOverlayMapperRef.current?.setInputData(image);
+      return runtime;
+    };
+
+    const applyLabelOverlay = (source: VtkImageData, runtime: OverlayRuntime): void => {
+      const labelScalars = source.getPointData().getScalars();
+      if (!labelScalars) {
+        throw new Error('Oblique slice label reslice is missing scalar data.');
+      }
+
+      const labelValues = labelScalars.getData();
+      const overlayAlpha = Math.round(LABEL_OVERLAY_ALPHA * 255);
+
+      runtime.values.fill(0);
+
+      for (let flatIndex = 0; flatIndex < runtime.widthPx * runtime.heightPx; flatIndex += 1) {
+        const labelColor = getLabelColor(Number(labelValues[flatIndex]));
+        if (!labelColor) {
+          continue;
+        }
+
+        const overlayIndex = flatIndex * 4;
+        runtime.values[overlayIndex] = labelColor[0];
+        runtime.values[overlayIndex + 1] = labelColor[1];
+        runtime.values[overlayIndex + 2] = labelColor[2];
+        runtime.values[overlayIndex + 3] = overlayAlpha;
+      }
+
+      runtime.scalars.dataChange();
+      runtime.image.modified();
+    };
+
     const flush = (): void => {
       const renderWindow = renderWindowRef.current;
       const mapper = mapperRef.current;
       const imageSlice = imageSliceRef.current;
       const reslice = resliceRef.current;
-      if (!renderWindow || !mapper || !imageSlice || !reslice) {
+      const labelOverlaySlice = labelOverlaySliceRef.current;
+      const labelReslice = labelResliceRef.current;
+      if (!renderWindow || !mapper || !imageSlice || !reslice || !labelOverlaySlice || !labelReslice) {
         return;
       }
 
@@ -133,12 +228,15 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       const heightPx = Math.max(1, Math.round(latestStateRef.current.height));
       const outputSpacingMm = 0.6;
       const blankImage = ensureBlankImage(widthPx, heightPx, outputSpacingMm);
+      const overlayActive = Boolean(latestStateRef.current.labelsVisible && latestStateRef.current.labelVolume);
 
       fitSliceCamera(renderWindow, widthPx * outputSpacingMm, heightPx * outputSpacingMm);
+      labelOverlaySlice.setVisibility(false);
 
       if (!latestStateRef.current.volume || !latestStateRef.current.imagingPlane) {
         mapper.setInputData(blankImage.image);
         imageSlice.setVisibility(false);
+        labelOverlaySlice.setVisibility(false);
         updateLoading(true);
         renderWindow.getRenderWindow().render();
         return;
@@ -159,6 +257,26 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
 
       mapper.setInputData(output);
       imageSlice.setVisibility(true);
+      if (overlayActive) {
+        const overlayRuntime = ensureOverlayRuntime(widthPx, heightPx, outputSpacingMm);
+
+        labelReslice.setInputData(latestStateRef.current.labelVolume!);
+        labelReslice.setResliceAxes(buildResliceAxes(latestStateRef.current.imagingPlane));
+        labelReslice.setOutputSpacing([outputSpacingMm, outputSpacingMm, 1]);
+        labelReslice.setOutputOrigin([-(widthPx * outputSpacingMm) / 2, 0, 0]);
+        labelReslice.setOutputExtent([0, widthPx - 1, 0, heightPx - 1, 0, 0]);
+        labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
+        labelReslice.setSlabNumberOfSlices(1);
+        labelReslice.update();
+
+        const labelOutput = labelReslice.getOutputData() as VtkImageData | null;
+        if (!labelOutput) {
+          throw new Error('vtkImageReslice returned no oblique slice label output.');
+        }
+
+        applyLabelOverlay(labelOutput, overlayRuntime);
+        labelOverlaySlice.setVisibility(true);
+      }
       updateLoading(false);
       renderWindow.getRenderWindow().render();
     };
@@ -181,11 +299,17 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       if (imagingPlane !== undefined) {
         latestStateRef.current.imagingPlane = imagingPlane;
       }
+      if (labelVolume !== undefined) {
+        latestStateRef.current.labelVolume = labelVolume;
+      }
+      if (labelsVisible !== undefined) {
+        latestStateRef.current.labelsVisible = labelsVisible;
+      }
       if (volume !== undefined) {
         latestStateRef.current.volume = volume;
       }
       flush();
-    }, [height, imagingPlane, volume, width]);
+    }, [height, imagingPlane, labelVolume, labelsVisible, volume, width]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -198,6 +322,10 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       const property = vtkImageProperty.newInstance();
       const imageSlice = vtkImageSlice.newInstance({ property });
       const reslice = vtkImageReslice.newInstance();
+      const labelOverlayMapper = vtkImageMapper.newInstance();
+      const labelOverlayProperty = vtkImageProperty.newInstance();
+      const labelOverlaySlice = vtkImageSlice.newInstance({ property: labelOverlayProperty });
+      const labelReslice = vtkImageReslice.newInstance();
       const transferFunctions = createCtTransferFunctions();
 
       setCanvasTestId(container, 'oblique-slice-canvas');
@@ -207,6 +335,11 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       reslice.setInterpolationMode(InterpolationMode.LINEAR);
       reslice.setSlabMode(SlabMode.MEAN);
       reslice.setSlabNumberOfSlices(1);
+      labelReslice.setOutputDimensionality(2);
+      labelReslice.setBackgroundColor([0, 0, 0, 0]);
+      labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
+      labelReslice.setSlabMode(SlabMode.MIN);
+      labelReslice.setSlabNumberOfSlices(1);
 
       mapper.setKSlice(0);
       imageSlice.setMapper(mapper);
@@ -216,19 +349,33 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       imageSlice.getProperty().setUseLookupTableScalarRange(true);
       renderWindow.getRenderer().addViewProp(imageSlice);
 
+      labelOverlayMapper.setKSlice(0);
+      labelOverlaySlice.setMapper(labelOverlayMapper);
+      labelOverlaySlice.getProperty().setIndependentComponents(false);
+      labelOverlaySlice.getProperty().setInterpolationTypeToNearest();
+      labelOverlaySlice.setVisibility(false);
+      renderWindow.getRenderer().addViewProp(labelOverlaySlice);
+
       renderWindowRef.current = renderWindow;
       imageSliceRef.current = imageSlice;
+      labelOverlaySliceRef.current = labelOverlaySlice;
       mapperRef.current = mapper;
+      labelOverlayMapperRef.current = labelOverlayMapper;
       resliceRef.current = reslice;
+      labelResliceRef.current = labelReslice;
 
       renderWindow.resize();
       flush();
 
       return () => {
         imageSliceRef.current = null;
+        labelOverlaySliceRef.current = null;
         mapperRef.current = null;
+        labelOverlayMapperRef.current = null;
         blankImageRef.current = null;
+        overlayRuntimeRef.current = null;
         resliceRef.current = null;
+        labelResliceRef.current = null;
         disposePipeline(renderWindow);
         renderWindowRef.current = null;
       };

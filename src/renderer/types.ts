@@ -34,15 +34,19 @@ export interface PseudoTeePaneProps {
   width: number;
   height: number;
   volume?: RendererVolume | null;
+  labelVolume?: RendererVolume | null;
   imagingPlane?: ImagingPlane | null;
   appearance?: PseudoTeeAppearance;
+  labelsVisible?: boolean;
 }
 
 export interface ObliqueSlicePaneProps {
   width: number;
   height: number;
   volume?: RendererVolume | null;
+  labelVolume?: RendererVolume | null;
   imagingPlane?: ImagingPlane | null;
+  labelsVisible?: boolean;
 }
 
 export interface Scene3DPaneHandle {

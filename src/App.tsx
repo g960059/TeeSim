@@ -53,6 +53,7 @@ export default function App() {
   const meshes = useTeeSimStore((state) => state.scene.meshes);
   const probePath = useTeeSimStore((state) => state.scene.probePath);
   const volume = useTeeSimStore((state) => state.scene.volume);
+  const labelVolume = useTeeSimStore((state) => state.scene.labelVolume);
   const loadPhase = useTeeSimStore((state) => state.scene.loadPhase);
   const structures = useTeeSimStore((state) => state.scene.structures);
   const loadCaseIndex = useTeeSimStore((state) => state.scene.loadCaseIndex);
@@ -117,6 +118,9 @@ export default function App() {
         {volume ? (
           <span className="status-pill">Public `heart_roi.vti` loaded</span>
         ) : null}
+        {labelVolume ? (
+          <span className="status-pill">Public `heart_labels.vti` loaded</span>
+        ) : null}
         {meshes.length > 0 ? (
           <span className="status-pill">Public GLB anatomy loaded</span>
         ) : null}
@@ -143,6 +147,8 @@ export default function App() {
                   <PseudoTeePane
                     appearance={{ slabThicknessMm: 4 }}
                     height={height}
+                    labelVolume={labelVolume}
+                    labelsVisible={labelsVisible}
                     ref={pseudoTeePaneRef}
                     volume={volume}
                     width={width}
@@ -195,6 +201,8 @@ export default function App() {
                 <ErrorBoundary label="Oblique Slice">
                   <ObliqueSlicePane
                     height={height}
+                    labelVolume={labelVolume}
+                    labelsVisible={labelsVisible}
                     ref={obliquePaneRef}
                     volume={volume}
                     width={width}

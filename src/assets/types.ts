@@ -65,6 +65,7 @@ export interface CaseManifest {
     sceneGlb?: MeshAssetRef;
     heartDetailGlb?: MeshAssetRef;
     heartRoiVti?: VolumeAssetRef;
+    labelVti?: VolumeAssetRef;
   };
   metadata: {
     probePath: string;
@@ -141,4 +142,5 @@ export interface LoadedCaseBundle {
   views: ViewPreset[];
   meshes: readonly vtkActor[];
   volume: VtkImageData | null;
+  labelVolume: VtkImageData | null;
 }

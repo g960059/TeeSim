@@ -174,7 +174,15 @@ export const loadCaseBundle = async (entry: CaseIndexEntry): Promise<LoadedCaseB
     );
   }
 
-  const [probePathAsset, rawViews, landmarks, sceneMeshes, heartDetailMeshes, volume] = await Promise.all([
+  const [
+    probePathAsset,
+    rawViews,
+    landmarks,
+    sceneMeshes,
+    heartDetailMeshes,
+    volume,
+    labelVolume,
+  ] = await Promise.all([
     fetchJson<ProbePathAsset>(getAssetUrl(entry, manifest.metadata.probePath)),
     fetchJson<ViewsAsset>(getAssetUrl(entry, manifest.metadata.views)),
     manifest.metadata.landmarks
@@ -189,6 +197,9 @@ export const loadCaseBundle = async (entry: CaseIndexEntry): Promise<LoadedCaseB
     manifest.assets?.heartRoiVti?.path
       ? loadVtiVolume(getAssetUrl(entry, manifest.assets.heartRoiVti.path))
       : Promise.resolve(null),
+    manifest.assets?.labelVti?.path
+      ? loadVtiVolume(getAssetUrl(entry, manifest.assets.labelVti.path))
+      : Promise.resolve(null),
   ]);
   const views = rawViews.map(normalizeViewAsset);
   const normalizedManifest = normalizeCaseManifest(entry, manifest, rawViews, landmarks);
@@ -199,6 +210,7 @@ export const loadCaseBundle = async (entry: CaseIndexEntry): Promise<LoadedCaseB
     meshes: [...sceneMeshes, ...heartDetailMeshes],
     probePath: toCenterlinePath(probePathAsset),
     volume,
+    labelVolume,
     views,
   };
 };

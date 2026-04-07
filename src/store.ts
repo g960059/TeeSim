@@ -24,6 +24,7 @@ interface SceneSlice {
   meshes: readonly vtkActor[];
   probePath: CenterlinePath | null;
   volume: VtkImageData | null;
+  labelVolume: VtkImageData | null;
   views: ViewPreset[];
   loadPhase: LoadPhase;
   structures: string[];
@@ -235,6 +236,7 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
       meshes: [],
       probePath: null,
       volume: null,
+      labelVolume: null,
       views: VIEW_PRESETS,
       loadPhase: 'idle',
       structures: [],
@@ -288,6 +290,7 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               meshes: [],
               probePath: null,
               volume: null,
+              labelVolume: null,
               views: VIEW_PRESETS,
               loadPhase: 'error',
               structures: [],
@@ -315,6 +318,7 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               meshes: bundle.meshes,
               probePath: bundle.probePath,
               volume: bundle.volume,
+              labelVolume: bundle.labelVolume,
               views: bundle.views,
               loadPhase: 'ready',
               structures: bundle.manifest.structures,
@@ -335,6 +339,7 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               meshes: [],
               probePath: null,
               volume: null,
+              labelVolume: null,
               views: VIEW_PRESETS,
               loadPhase: 'error',
               structures: [],

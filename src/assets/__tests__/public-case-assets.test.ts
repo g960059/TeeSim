@@ -88,6 +88,7 @@ describe('public LCTSC case assets', () => {
     const omniplaneValues = new Set(bundle.views.map((view) => view.probePose.omniplaneDeg));
 
     expect(bundle.views).toHaveLength(8);
+    expect(bundle.labelVolume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/heart_labels.vti' });
     expect(presetsById.get('me-4c')?.probePose.sMm).toBe(97);
     expect(presetsById.get('me-2c')?.probePose.sMm).toBe(97);
     expect(presetsById.get('me-4c')?.probePose.omniplaneDeg).toBe(0);

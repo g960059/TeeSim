@@ -66,6 +66,7 @@ describe('asset loader', () => {
               sceneGlb: { path: 'scene.glb' },
               heartDetailGlb: { path: 'heart_detail.glb' },
               heartRoiVti: { path: 'heart_roi.vti' },
+              labelVti: { path: 'heart_labels.vti' },
             },
             metadata: {
               probePath: 'probe_path.json',
@@ -140,11 +141,20 @@ describe('asset loader', () => {
       '/cases/0.1.0/lctsc_s1_006/heart_detail.glb',
     );
     expect(runtimeLoaderMocks.loadVtiVolume).toHaveBeenCalledWith(
+      '/cases/0.1.0/lctsc_s1_006/heart_labels.vti',
+    );
+    expect(runtimeLoaderMocks.loadVtiVolume).toHaveBeenNthCalledWith(
+      1,
       '/cases/0.1.0/lctsc_s1_006/heart_roi.vti',
+    );
+    expect(runtimeLoaderMocks.loadVtiVolume).toHaveBeenNthCalledWith(
+      2,
+      '/cases/0.1.0/lctsc_s1_006/heart_labels.vti',
     );
 
     expect(bundle.meshes).toHaveLength(2);
     expect(bundle.volume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/heart_roi.vti' });
+    expect(bundle.labelVolume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/heart_labels.vti' });
     expect(bundle.manifest.structures).toEqual(['heart', 'esophagus', 'lung_r']);
     expect(bundle.probePath.points[0]).toEqual({
       position: [1, 2, 3],

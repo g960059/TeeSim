@@ -173,7 +173,7 @@ def export_glb(meshes: dict[str, trimesh.Trimesh], output_path: str):
     print(f"  Exported {output_path}: {size_mb:.1f} MB")
 
 
-def export_vti(ct_image: sitk.Image, masks: dict, output_path: str, roi_center: list, roi_size_mm: list = [200, 200, 180]):
+def export_vti(ct_image: sitk.Image, masks: dict, output_path: str, roi_center: list, roi_size_mm: list = [200, 200, 280]):
     """Export a cropped cardiac ROI as VTI."""
     spacing = ct_image.GetSpacing()
 
@@ -223,6 +223,132 @@ def export_vti(ct_image: sitk.Image, masks: dict, output_path: str, roi_center: 
 
     size_mb = os.path.getsize(output_path) / 1e6
     print(f"  Exported {output_path}: {size_mb:.1f} MB, dims={arr.shape}")
+    return resampled  # Return the resampled image for use as reference grid
+
+
+def run_totalsegmentator(ct_image: sitk.Image, output_dir: str) -> dict[str, sitk.Image]:
+    """Run TotalSegmentator on CT to get per-structure label masks."""
+    import tempfile
+
+    # Save CT as temporary NIfTI for TotalSegmentator
+    tmp_ct = os.path.join(output_dir, '_tmp_ct.nii.gz')
+    sitk.WriteImage(ct_image, tmp_ct)
+
+    # Run 'total' task (open license, covers: heart, aorta, esophagus, SVC, IVC, lungs, pulmonary_vein)
+    tmp_seg_dir = os.path.join(output_dir, '_tmp_totalseg')
+    os.makedirs(tmp_seg_dir, exist_ok=True)
+
+    print("  Running TotalSegmentator 'total' task (CPU, may take 5-10 min)...")
+    try:
+        from totalsegmentator.python_api import totalsegmentator
+        totalsegmentator(tmp_ct, tmp_seg_dir, task='total', fast=True, device='cpu', verbose=True)
+    except Exception as e:
+        print(f"  TotalSegmentator failed: {e}")
+        return {}
+
+    # Load relevant structure masks
+    STRUCTURE_MAP = {
+        'heart': ('heart.nii.gz', 7),
+        'aorta': ('aorta.nii.gz', 1),
+        'pulmonary_vein': ('pulmonary_vein.nii.gz', 2),
+        'superior_vena_cava': ('superior_vena_cava.nii.gz', 3),
+        'inferior_vena_cava': ('inferior_vena_cava.nii.gz', 4),
+        'esophagus': ('esophagus.nii.gz', 5),
+    }
+
+    # Also load lung lobes and merge
+    LUNG_FILES = [
+        'lung_upper_lobe_left.nii.gz', 'lung_lower_lobe_left.nii.gz',
+        'lung_upper_lobe_right.nii.gz', 'lung_middle_lobe_right.nii.gz', 'lung_lower_lobe_right.nii.gz',
+    ]
+
+    masks = {}
+    for name, (filename, label_id) in STRUCTURE_MAP.items():
+        fpath = os.path.join(tmp_seg_dir, filename)
+        if os.path.exists(fpath):
+            masks[name] = (sitk.ReadImage(fpath), label_id)
+            print(f"    Loaded {name} (label {label_id})")
+        else:
+            print(f"    Missing {filename}")
+
+    # Merge lung lobes into single lung mask
+    lung_mask = None
+    for lf in LUNG_FILES:
+        fpath = os.path.join(tmp_seg_dir, lf)
+        if os.path.exists(fpath):
+            m = sitk.ReadImage(fpath)
+            if lung_mask is None:
+                lung_mask = m
+            else:
+                lung_mask = sitk.Or(lung_mask, m)
+    if lung_mask is not None:
+        masks['lung'] = (lung_mask, 6)
+        print(f"    Merged lungs (label 6)")
+
+    # Try heartchambers_highres (requires separate license)
+    # Skip entirely for now — academic license must be obtained first
+    # See: https://backend.totalsegmentator.com/license-academic/
+    print("  Skipping 'heartchambers_highres' (requires license). Using 'total' task labels only.")
+
+    # Cleanup temp CT file (keep segmentation dir for debugging)
+    try:
+        if os.path.exists(tmp_ct):
+            os.remove(tmp_ct)
+    except OSError:
+        pass
+
+    return masks
+
+
+def export_label_vti(masks: dict, reference_vti: sitk.Image, output_path: str):
+    """Export a combined label VTI aligned to the intensity VTI grid.
+
+    Uses the intensity VTI as reference to guarantee exact grid alignment.
+    """
+    # Create empty label volume on the reference grid
+    ref_arr = sitk.GetArrayFromImage(reference_vti)
+    label_arr = np.zeros(ref_arr.shape, dtype=np.uint8)
+
+    # Sort by label ID (lower IDs get overwritten by higher = higher priority)
+    sorted_masks = sorted(masks.items(), key=lambda x: x[1][1])
+
+    for name, (mask_img, label_id) in sorted_masks:
+        # Resample mask to reference grid with nearest-neighbor
+        resampled = sitk.Resample(
+            mask_img,
+            reference_vti,
+            sitk.Transform(),
+            sitk.sitkNearestNeighbor,
+            0,  # default pixel value
+            mask_img.GetPixelID(),
+        )
+        mask_arr = sitk.GetArrayFromImage(resampled)
+        label_arr[mask_arr > 0] = label_id
+        nonzero = int((mask_arr > 0).sum())
+        print(f"    {name} (ID={label_id}): {nonzero} voxels in ROI")
+
+    # Convert to VTK
+    origin = reference_vti.GetOrigin()
+    spacing = reference_vti.GetSpacing()
+
+    vtk_data = vtk.vtkImageData()
+    vtk_data.SetDimensions(label_arr.shape[2], label_arr.shape[1], label_arr.shape[0])
+    vtk_data.SetSpacing(spacing)
+    vtk_data.SetOrigin(origin)
+
+    flat = label_arr.flatten(order='C')
+    vtk_arr = numpy_to_vtk(flat, deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
+    vtk_data.GetPointData().SetScalars(vtk_arr)
+
+    writer = vtk.vtkXMLImageDataWriter()
+    writer.SetFileName(output_path)
+    writer.SetInputData(vtk_data)
+    writer.SetCompressorTypeToZLib()
+    writer.Write()
+
+    unique_labels = np.unique(label_arr)
+    size_mb = os.path.getsize(output_path) / 1e6
+    print(f"  Exported {output_path}: {size_mb:.1f} MB, labels={unique_labels.tolist()}")
 
 
 def generate_probe_path(esophagus_mask: sitk.Image, heart_center: np.ndarray | None = None) -> dict:
@@ -574,7 +700,18 @@ def main():
     print("5. Exporting VTI volume...")
     heart_center = compute_heart_center(masks, ct_image)
     print(f"  Heart center: {heart_center}")
-    export_vti(ct_image, masks, os.path.join(args.output_dir, "heart_roi.vti"), heart_center)
+    reference_vti = export_vti(ct_image, masks, os.path.join(args.output_dir, "heart_roi.vti"), heart_center)
+
+    # 5b. Run TotalSegmentator for label segmentation
+    print("5b. Running TotalSegmentator for label segmentation...")
+    ts_masks = run_totalsegmentator(ct_image, args.output_dir)
+
+    # 5c. Export label VTI (aligned to intensity VTI grid)
+    if ts_masks and reference_vti is not None:
+        print("5c. Exporting label VTI...")
+        export_label_vti(ts_masks, reference_vti, os.path.join(args.output_dir, "heart_labels.vti"))
+    else:
+        print("  Skipping label VTI (no TotalSegmentator masks or missing reference)")
 
     # 6. Generate probe path
     print("6. Generating probe path...")
@@ -628,6 +765,7 @@ def main():
             "sceneGlb": {"path": "scene.glb"},
             "heartDetailGlb": {"path": "heart_detail.glb"},
             "heartRoiVti": {"path": "heart_roi.vti"},
+            "labelVti": {"path": "heart_labels.vti", "scalarType": "Uint8"},
         },
         "metadata": {
             "landmarks": "landmarks.json",
