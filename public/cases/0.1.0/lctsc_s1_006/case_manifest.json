@@ -32,6 +32,68 @@
       "scalarType": "Uint8"
     }
   },
+  "motionPhases": [
+    {
+      "phase": 0,
+      "path": "phases/phase_00.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 1,
+      "path": "phases/phase_01.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 2,
+      "path": "phases/phase_02.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 3,
+      "path": "phases/phase_03.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 4,
+      "path": "phases/phase_04.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 5,
+      "path": "phases/phase_05.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 6,
+      "path": "phases/phase_06.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 7,
+      "path": "phases/phase_07.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 8,
+      "path": "phases/phase_08.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 9,
+      "path": "phases/phase_09.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 10,
+      "path": "phases/phase_10.vti",
+      "scalarType": "Uint8"
+    },
+    {
+      "phase": 11,
+      "path": "phases/phase_11.vti",
+      "scalarType": "Uint8"
+    }
+  ],
   "metadata": {
     "landmarks": "landmarks.json",
     "probePath": "probe_path.json",

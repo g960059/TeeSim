@@ -54,6 +54,11 @@ export default function App() {
   const probePath = useTeeSimStore((state) => state.scene.probePath);
   const volume = useTeeSimStore((state) => state.scene.volume);
   const labelVolume = useTeeSimStore((state) => state.scene.labelVolume);
+  const cardiacPhase = useTeeSimStore((state) => state.cardiac.cardiacPhase);
+  const resolvedCardiacPhase = useTeeSimStore((state) => state.cardiac.resolvedPhase);
+  const activeLabelVolume = useTeeSimStore(
+    (state) => state.cardiac.phaseVolumes.get(state.cardiac.resolvedPhase) ?? state.scene.labelVolume,
+  );
   const loadPhase = useTeeSimStore((state) => state.scene.loadPhase);
   const structures = useTeeSimStore((state) => state.scene.structures);
   const loadCaseIndex = useTeeSimStore((state) => state.scene.loadCaseIndex);
@@ -122,6 +127,12 @@ export default function App() {
         {labelVolume ? (
           <span className="status-pill">Public `heart_labels.vti` loaded</span>
         ) : null}
+        {manifest?.motionPhases?.length ? (
+          <span className="status-pill">
+            Cardiac phase {cardiacPhase + 1}/{manifest.motionPhases.length}
+            {resolvedCardiacPhase !== cardiacPhase ? ' (loading)' : ''}
+          </span>
+        ) : null}
         {meshes.length > 0 ? (
           <span className="status-pill">Public GLB anatomy loaded</span>
         ) : null}
@@ -148,7 +159,7 @@ export default function App() {
                   <PseudoTeePane
                     appearance={{ depthMm }}
                     height={height}
-                    labelVolume={labelVolume}
+                    labelVolume={activeLabelVolume}
                     labelsVisible={labelsVisible}
                     ref={pseudoTeePaneRef}
                     volume={volume}
@@ -202,7 +213,7 @@ export default function App() {
                 <ErrorBoundary label="Oblique Slice">
                   <ObliqueSlicePane
                     height={height}
-                    labelVolume={labelVolume}
+                    labelVolume={activeLabelVolume}
                     labelsVisible={labelsVisible}
                     ref={obliquePaneRef}
                     volume={volume}

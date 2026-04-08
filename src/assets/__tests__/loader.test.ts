@@ -7,7 +7,7 @@ const runtimeLoaderMocks = vi.hoisted(() => ({
 
 vi.mock('../runtime-loaders', () => runtimeLoaderMocks);
 
-import { loadCaseBundle, loadCaseIndex } from '../loader';
+import { loadCaseBundle, loadCaseIndex, loadMotionPhaseVolume } from '../loader';
 
 const jsonResponse = (body: unknown): Response =>
   ({
@@ -68,6 +68,10 @@ describe('asset loader', () => {
               heartRoiVti: { path: 'heart_roi.vti' },
               labelVti: { path: 'heart_labels.vti' },
             },
+            motionPhases: [
+              { phase: 2, path: 'phases/phase_02.vti' },
+              { phase: 1, path: 'phases/phase_01.vti' },
+            ],
             metadata: {
               probePath: 'probe_path.json',
               views: 'views.json',
@@ -155,6 +159,10 @@ describe('asset loader', () => {
     expect(bundle.meshes).toHaveLength(2);
     expect(bundle.volume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/heart_roi.vti' });
     expect(bundle.labelVolume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/heart_labels.vti' });
+    expect(bundle.motionPhases).toEqual([
+      { phase: 1, path: 'phases/phase_01.vti' },
+      { phase: 2, path: 'phases/phase_02.vti' },
+    ]);
     expect(bundle.manifest.structures).toEqual(['heart', 'esophagus', 'lung_r']);
     expect(bundle.probePath.points[0]).toEqual({
       position: [1, 2, 3],
@@ -172,5 +180,42 @@ describe('asset loader', () => {
       omniplaneDeg: 12,
     });
     expect(bundle.views[0].validation.status).toBe('pending');
+  });
+
+  it('loads a motion-phase VTI lazily from the manifest', async () => {
+    const volume = await loadMotionPhaseVolume(
+      {
+        id: 'lctsc_s1_006',
+        title: 'LCTSC S1-006',
+        description: 'Thorax CT public case',
+        bundleVersion: '0.1.0',
+        caseVersion: '0.1.0',
+      },
+      {
+        schemaVersion: '1.0.0',
+        caseId: 'lctsc_s1_006',
+        caseVersion: '0.1.0',
+        bundleVersion: '0.1.0',
+        coordinateSystem: 'RAS',
+        units: 'mm',
+        worldFromImage: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        worldFromMesh: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        generator: {},
+        sources: [],
+        structures: [],
+        assets: {},
+        motionPhases: [{ phase: 5, path: 'phases/phase_05.vti' }],
+        metadata: {
+          probePath: 'probe_path.json',
+          views: 'views.json',
+        },
+      },
+      5,
+    );
+
+    expect(volume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/phases/phase_05.vti' });
+    expect(runtimeLoaderMocks.loadVtiVolume).toHaveBeenCalledWith(
+      '/cases/0.1.0/lctsc_s1_006/phases/phase_05.vti',
+    );
   });
 });

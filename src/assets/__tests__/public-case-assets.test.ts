@@ -89,6 +89,9 @@ describe('public LCTSC case assets', () => {
 
     expect(bundle.views).toHaveLength(8);
     expect(bundle.labelVolume).toEqual({ url: '/cases/0.1.0/lctsc_s1_006/heart_labels.vti' });
+    expect(bundle.motionPhases).toHaveLength(12);
+    expect(bundle.motionPhases[0]).toMatchObject({ phase: 0, path: 'phases/phase_00.vti' });
+    expect(bundle.motionPhases.at(-1)).toMatchObject({ phase: 11, path: 'phases/phase_11.vti' });
     expect(presetsById.get('me-4c')?.probePose.sMm).toBe(97);
     expect(presetsById.get('me-2c')?.probePose.sMm).toBe(97);
     expect(presetsById.get('me-4c')?.probePose.omniplaneDeg).toBe(0);
@@ -136,5 +139,16 @@ describe('public LCTSC case assets', () => {
     expect(Math.max(...points.map((point) => point.position[2]))).toBeLessThanOrEqual(volumeBounds[5] + 120);
     expect(minDistanceToEsophagus).toBeLessThan(15);
     expect(meanMeDistanceToEsophagus).toBeLessThan(35);
+  });
+
+  it('ships all generated cardiac motion phase assets', () => {
+    const manifest = readJson<{ motionPhases?: { phase: number; path: string }[] }>('case_manifest.json');
+    const motionPhases = manifest.motionPhases ?? [];
+
+    expect(motionPhases).toHaveLength(12);
+
+    for (const phase of motionPhases) {
+      expect(fs.existsSync(path.join(publicCaseRoot, phase.path))).toBe(true);
+    }
   });
 });

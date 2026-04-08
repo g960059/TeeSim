@@ -64,6 +64,21 @@ const sliderControls: SliderControl[] = [
   },
 ];
 
+const cardiacPhaseLabels = [
+  'ED',
+  'IsoC',
+  'Ej-1',
+  'Ej-2',
+  'Ej-3',
+  'ES',
+  'IsoR',
+  'Fill-1',
+  'Fill-2',
+  'Fill-3',
+  'Fill-4',
+  'Fill-5',
+] as const;
+
 const formatSliderValue = (key: SliderControl['displayKey'], value: number): string => {
   if (key === 's') {
     return value.toFixed(0);
@@ -77,7 +92,17 @@ export function ProbeHUD() {
   const setProbe = useTeeSimStore((state) => state.probe.setProbe);
   const depthMm = useTeeSimStore((state) => state.ui.depthMm);
   const setDepthMm = useTeeSimStore((state) => state.ui.setDepthMm);
+  const motionPhaseCount = useTeeSimStore((state) => state.scene.manifest?.motionPhases?.length ?? 0);
+  const cardiacPhase = useTeeSimStore((state) => state.cardiac.cardiacPhase);
+  const isPlaying = useTeeSimStore((state) => state.cardiac.isPlaying);
+  const cycleMs = useTeeSimStore((state) => state.cardiac.cycleMs);
+  const play = useTeeSimStore((state) => state.cardiac.play);
+  const pause = useTeeSimStore((state) => state.cardiac.pause);
+  const setPhase = useTeeSimStore((state) => state.cardiac.setPhase);
   const station = getStationLabel(probe.sMm);
+  const hasMotion = motionPhaseCount > 0;
+  const heartRateBpm = Math.round(60000 / cycleMs);
+  const maxPhase = Math.max(motionPhaseCount - 1, 0);
 
   return (
     <section className="panel-card">
@@ -137,6 +162,54 @@ export function ProbeHUD() {
             value={depthMm}
           />
         </label>
+
+        <div className="motion-panel">
+          <div className="motion-header">
+            <div>
+              <span className="motion-title">Cardiac motion</span>
+              <span className="motion-subtitle" data-testid="cardiac-hr">
+                {hasMotion ? `${heartRateBpm} bpm` : 'Static labels'}
+              </span>
+            </div>
+            <button
+              className="secondary-button motion-toggle"
+              data-testid="cardiac-play-pause"
+              disabled={!hasMotion}
+              onClick={() => {
+                if (isPlaying) {
+                  pause();
+                  return;
+                }
+                play();
+              }}
+              type="button"
+            >
+              {isPlaying ? 'Pause' : 'Play'}
+            </button>
+          </div>
+
+          <label className="slider-row" key="cardiacPhase">
+            <div className="slider-meta">
+              <span>Phase</span>
+              <span data-testid="cardiac-phase-value">
+                {cardiacPhaseLabels[cardiacPhase] ?? `P${cardiacPhase + 1}`}
+              </span>
+            </div>
+            <input
+              className="slider-input"
+              data-testid="cardiac-phase"
+              disabled={!hasMotion}
+              max={maxPhase}
+              min={0}
+              onChange={(event) => {
+                setPhase(Number(event.currentTarget.value));
+              }}
+              step={1}
+              type="range"
+              value={cardiacPhase}
+            />
+          </label>
+        </div>
       </div>
     </section>
   );

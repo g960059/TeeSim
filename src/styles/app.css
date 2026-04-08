@@ -384,6 +384,39 @@ button {
   gap: 14px;
 }
 
+.motion-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.motion-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.motion-title,
+.motion-subtitle {
+  display: block;
+}
+
+.motion-title {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.motion-subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+  margin-top: 4px;
+}
+
+.motion-toggle {
+  min-width: 88px;
+}
+
 .slider-row {
   display: grid;
   gap: 8px;

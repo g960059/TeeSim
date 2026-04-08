@@ -1,3 +1,4 @@
+import type { vtkImageData as VtkImageData } from '@kitware/vtk.js/Common/DataModel/ImageData';
 import type { CenterlinePath, ViewPreset } from '../core';
 import type {
   CaseIndexEntry,
@@ -5,6 +6,7 @@ import type {
   CaseManifest,
   LandmarksAsset,
   LoadedCaseBundle,
+  MotionPhaseAssetRef,
   ProbePathAsset,
   RawCaseIndexEntry,
   RawCaseManifest,
@@ -40,6 +42,13 @@ const getAssetUrl = (entry: CaseIndexEntry, relativePath: string): string =>
 
 const dedupeStrings = (values: readonly string[]): string[] =>
   values.filter((value, index) => values.indexOf(value) === index);
+
+const normalizeMotionPhases = (
+  motionPhases: readonly MotionPhaseAssetRef[] | undefined,
+): MotionPhaseAssetRef[] =>
+  [...(motionPhases ?? [])]
+    .filter((phase) => Number.isFinite(phase.phase))
+    .sort((a, b) => a.phase - b.phase);
 
 const normalizeCaseIndexEntry = (entry: RawCaseIndexEntry): CaseIndexEntry => {
   const id = entry.id ?? entry.caseId;
@@ -85,6 +94,7 @@ const normalizeCaseManifest = (
     sources: manifest.sources ?? [],
     structures: derivedStructures,
     assets: manifest.assets,
+    motionPhases: normalizeMotionPhases(manifest.motionPhases),
     metadata: manifest.metadata,
   };
 };
@@ -165,6 +175,19 @@ export const loadCaseIndex = async (): Promise<CaseIndexEntry[]> => {
   return index.cases.map(normalizeCaseIndexEntry);
 };
 
+export const loadMotionPhaseVolume = async (
+  entry: CaseIndexEntry,
+  manifest: CaseManifest,
+  phase: number,
+): Promise<VtkImageData | null> => {
+  const phaseAsset = manifest.motionPhases?.find((candidate) => candidate.phase === phase);
+  if (!phaseAsset) {
+    return null;
+  }
+
+  return loadVtiVolume(getAssetUrl(entry, phaseAsset.path));
+};
+
 export const loadCaseBundle = async (entry: CaseIndexEntry): Promise<LoadedCaseBundle> => {
   const manifest = await fetchJson<RawCaseManifest>(`${getCaseBasePath(entry)}/case_manifest.json`);
 
@@ -207,6 +230,7 @@ export const loadCaseBundle = async (entry: CaseIndexEntry): Promise<LoadedCaseB
   return {
     entry,
     manifest: normalizedManifest,
+    motionPhases: normalizedManifest.motionPhases ?? [],
     meshes: [...sceneMeshes, ...heartDetailMeshes],
     probePath: toCenterlinePath(probePathAsset),
     volume,

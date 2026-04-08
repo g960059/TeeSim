@@ -3,7 +3,13 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import type { vtkImageData as VtkImageData } from '@kitware/vtk.js/Common/DataModel/ImageData';
 import type vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 
-import { loadCaseBundle, loadCaseIndex, type CaseIndexEntry, type CaseManifest } from './assets';
+import {
+  loadCaseBundle,
+  loadCaseIndex,
+  loadMotionPhaseVolume,
+  type CaseIndexEntry,
+  type CaseManifest,
+} from './assets';
 import { clamp } from './core/math';
 import { matchViews } from './core/view-matcher';
 import type { CenterlinePath, ProbePose, ViewMatch, ViewPreset } from './core/types';
@@ -46,11 +52,23 @@ interface UiSlice {
   toggleLabelsVisible: () => void;
 }
 
+interface CardiacSlice {
+  cardiacPhase: number;
+  resolvedPhase: number;
+  isPlaying: boolean;
+  cycleMs: number;
+  phaseVolumes: Map<number, VtkImageData>;
+  play: () => void;
+  pause: () => void;
+  setPhase: (phase: number) => void;
+}
+
 export interface TeeSimStoreState {
   probe: ProbeSlice;
   scene: SceneSlice;
   viewMatch: ViewMatchSlice;
   ui: UiSlice;
+  cardiac: CardiacSlice;
 }
 
 const pendingValidation = {
@@ -154,8 +172,15 @@ const DEFAULT_PROBE_POSE: ProbePose = {
   omniplaneDeg: 25,
 };
 const DEFAULT_DEPTH_MM = 140;
+const CARDIAC_PHASE_COUNT = 12;
+const DEFAULT_CYCLE_MS = 1000;
+const MAX_PHASE_CACHE = 3;
 
 let caseLoadRequestToken = 0;
+let cardiacAnimationFrameId: number | null = null;
+let cardiacAnimationStartMs = 0;
+let cardiacAnimationStep = 0;
+const pendingMotionPhaseLoads = new Map<string, Promise<VtkImageData | null>>();
 
 export const selectProbePose = (state: Pick<TeeSimStoreState, 'probe'>): ProbePose => ({
   sMm: state.probe.sMm,
@@ -164,6 +189,60 @@ export const selectProbePose = (state: Pick<TeeSimStoreState, 'probe'>): ProbePo
   lateralDeg: state.probe.lateralDeg,
   omniplaneDeg: state.probe.omniplaneDeg,
 });
+
+const normalizeCardiacPhase = (phase: number): number => {
+  const wrapped = Math.round(phase) % CARDIAC_PHASE_COUNT;
+  return wrapped < 0 ? wrapped + CARDIAC_PHASE_COUNT : wrapped;
+};
+
+const getAdjacentCardiacPhases = (phase: number): readonly [number, number, number] => {
+  const current = normalizeCardiacPhase(phase);
+  return [
+    normalizeCardiacPhase(current - 1),
+    current,
+    normalizeCardiacPhase(current + 1),
+  ] as const;
+};
+
+const prunePhaseCache = (
+  cache: ReadonlyMap<number, VtkImageData>,
+  phase: number,
+): Map<number, VtkImageData> => {
+  const allowed = new Set(getAdjacentCardiacPhases(phase));
+  const next = new Map<number, VtkImageData>();
+
+  for (const [cachedPhase, volume] of cache.entries()) {
+    if (allowed.has(cachedPhase)) {
+      next.set(cachedPhase, volume);
+    }
+  }
+
+  if (next.size <= MAX_PHASE_CACHE) {
+    return next;
+  }
+
+  const phases = getAdjacentCardiacPhases(phase);
+  return new Map(
+    phases
+      .filter((adjacentPhase) => next.has(adjacentPhase))
+      .map((adjacentPhase) => [adjacentPhase, next.get(adjacentPhase)!]),
+  );
+};
+
+const getMotionPhaseLoadKey = (caseId: string, phase: number): string =>
+  `${caseId}:${normalizeCardiacPhase(phase)}`;
+
+const stopCardiacAnimation = (): void => {
+  if (typeof window === 'undefined') {
+    cardiacAnimationFrameId = null;
+    return;
+  }
+
+  if (cardiacAnimationFrameId !== null) {
+    window.cancelAnimationFrame(cardiacAnimationFrameId);
+    cardiacAnimationFrameId = null;
+  }
+};
 
 const clampProbePose = (pose: ProbePose): ProbePose => ({
   sMm: clamp(pose.sMm, PROBE_LIMITS.sMm.min, PROBE_LIMITS.sMm.max),
@@ -204,184 +283,389 @@ export const getStationLabel = (sMm: number): string => {
 const initialViewMatch = deriveViewMatch(DEFAULT_PROBE_POSE, VIEW_PRESETS);
 
 export const useTeeSimStore = create<TeeSimStoreState>()(
-  subscribeWithSelector((set, get) => ({
-    probe: {
-      ...DEFAULT_PROBE_POSE,
-      setProbe: (patch) =>
-        set((state) => {
-          const nextPose = clampProbePose({
-            ...selectProbePose(state),
-            ...patch,
+  subscribeWithSelector((set, get) => {
+    const ensureMotionPhaseLoaded = async (phase: number): Promise<VtkImageData | null> => {
+      const normalizedPhase = normalizeCardiacPhase(phase);
+      const state = get();
+      const currentCase = state.scene.currentCase;
+      const manifest = state.scene.manifest;
+
+      if (normalizedPhase === 0 && state.scene.labelVolume) {
+        set((innerState) => ({
+          cardiac: {
+            ...innerState.cardiac,
+            phaseVolumes: prunePhaseCache(
+              new Map(innerState.cardiac.phaseVolumes).set(0, state.scene.labelVolume!),
+              innerState.cardiac.cardiacPhase,
+            ),
+          },
+        }));
+        return state.scene.labelVolume;
+      }
+
+      if (!currentCase || !manifest?.motionPhases?.length) {
+        return null;
+      }
+
+      const cached = state.cardiac.phaseVolumes.get(normalizedPhase);
+      if (cached) {
+        return cached;
+      }
+
+      const caseId = currentCase.id;
+      const loadKey = getMotionPhaseLoadKey(caseId, normalizedPhase);
+      let pendingLoad = pendingMotionPhaseLoads.get(loadKey);
+      if (!pendingLoad) {
+        pendingLoad = loadMotionPhaseVolume(currentCase, manifest, normalizedPhase).finally(() => {
+          pendingMotionPhaseLoads.delete(loadKey);
+        });
+        pendingMotionPhaseLoads.set(loadKey, pendingLoad);
+      }
+
+      const volume = await pendingLoad;
+      if (!volume) {
+        return null;
+      }
+
+      set((innerState) => {
+        if (innerState.scene.currentCaseId !== caseId) {
+          return innerState;
+        }
+
+        const nextPhaseVolumes = new Map(innerState.cardiac.phaseVolumes);
+        nextPhaseVolumes.set(normalizedPhase, volume);
+
+        return {
+          cardiac: {
+            ...innerState.cardiac,
+            phaseVolumes: prunePhaseCache(nextPhaseVolumes, innerState.cardiac.cardiacPhase),
+            resolvedPhase:
+              innerState.cardiac.cardiacPhase === normalizedPhase
+                ? normalizedPhase
+                : innerState.cardiac.resolvedPhase,
+          },
+        };
+      });
+
+      return volume;
+    };
+
+    const queueMotionPrefetch = (phase: number): void => {
+      void ensureMotionPhaseLoaded(phase).catch(() => undefined);
+    };
+
+    const startCardiacAnimation = (): void => {
+      if (typeof window === 'undefined' || cardiacAnimationFrameId !== null) {
+        return;
+      }
+
+      const initialState = get();
+      const phaseDuration = initialState.cardiac.cycleMs / CARDIAC_PHASE_COUNT;
+      if (phaseDuration <= 0) {
+        return;
+      }
+
+      cardiacAnimationStep = normalizeCardiacPhase(initialState.cardiac.cardiacPhase);
+      cardiacAnimationStartMs = window.performance.now() - cardiacAnimationStep * phaseDuration;
+
+      const tick = (now: number): void => {
+        const state = get();
+        if (!state.cardiac.isPlaying) {
+          stopCardiacAnimation();
+          return;
+        }
+
+        const nextPhaseDuration = state.cardiac.cycleMs / CARDIAC_PHASE_COUNT;
+        if (nextPhaseDuration <= 0) {
+          stopCardiacAnimation();
+          return;
+        }
+
+        const elapsedSteps = Math.floor((now - cardiacAnimationStartMs) / nextPhaseDuration);
+        if (elapsedSteps !== cardiacAnimationStep) {
+          cardiacAnimationStep = elapsedSteps;
+          state.cardiac.setPhase(elapsedSteps);
+        }
+
+        cardiacAnimationFrameId = window.requestAnimationFrame(tick);
+      };
+
+      cardiacAnimationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    return {
+      probe: {
+        ...DEFAULT_PROBE_POSE,
+        setProbe: (patch) =>
+          set((state) => {
+            const nextPose = clampProbePose({
+              ...selectProbePose(state),
+              ...patch,
+            });
+
+            return {
+              probe: {
+                ...state.probe,
+                ...nextPose,
+              },
+              viewMatch: deriveViewMatch(nextPose, getActiveViewPresets(state)),
+            };
+          }),
+        snapToView: (preset) =>
+          set((state) => {
+            const nextPose = clampProbePose(preset.probePose);
+
+            return {
+              probe: {
+                ...state.probe,
+                ...nextPose,
+              },
+              viewMatch: deriveViewMatch(nextPose, getActiveViewPresets(state)),
+            };
+          }),
+      },
+      scene: {
+        caseIndex: [],
+        currentCase: null,
+        currentCaseId: null,
+        manifest: null,
+        meshes: [],
+        probePath: null,
+        volume: null,
+        labelVolume: null,
+        views: VIEW_PRESETS,
+        loadPhase: 'idle',
+        structures: [],
+        loadCaseIndex: async () => {
+          if (get().scene.caseIndex.length > 0) {
+            return;
+          }
+
+          const caseIndex = await loadCaseIndex();
+          set((state) => ({
+            scene: {
+              ...state.scene,
+              caseIndex,
+            },
+          }));
+        },
+        loadCase: async (caseId) => {
+          const requestToken = ++caseLoadRequestToken;
+          stopCardiacAnimation();
+
+          set((state) => ({
+            scene: {
+              ...state.scene,
+              currentCaseId: caseId,
+              loadPhase: 'loading',
+            },
+            cardiac: {
+              ...state.cardiac,
+              cardiacPhase: 0,
+              resolvedPhase: 0,
+              isPlaying: false,
+              phaseVolumes: new Map(),
+            },
+          }));
+
+          let caseIndex = get().scene.caseIndex;
+          if (caseIndex.length === 0) {
+            caseIndex = await loadCaseIndex();
+            if (requestToken !== caseLoadRequestToken) {
+              return;
+            }
+
+            set((state) => ({
+              scene: {
+                ...state.scene,
+                caseIndex,
+              },
+            }));
+          }
+
+          const currentCase = caseIndex.find((entry) => entry.id === caseId) ?? null;
+          if (!currentCase) {
+            set((state) => ({
+              scene: {
+                ...state.scene,
+                currentCase: null,
+                currentCaseId: null,
+                manifest: null,
+                meshes: [],
+                probePath: null,
+                volume: null,
+                labelVolume: null,
+                views: VIEW_PRESETS,
+                loadPhase: 'error',
+                structures: [],
+              },
+              cardiac: {
+                ...state.cardiac,
+                cardiacPhase: 0,
+                resolvedPhase: 0,
+                isPlaying: false,
+                phaseVolumes: new Map(),
+              },
+              viewMatch: deriveViewMatch(selectProbePose(state), VIEW_PRESETS),
+            }));
+            return;
+          }
+
+          try {
+            const bundle = await loadCaseBundle(currentCase);
+            if (requestToken !== caseLoadRequestToken) {
+              return;
+            }
+
+            const nextProbePose = selectProbePose(get());
+            const phaseVolumes = bundle.labelVolume
+              ? new Map<number, VtkImageData>([[0, bundle.labelVolume]])
+              : new Map<number, VtkImageData>();
+
+            set((state) => ({
+              scene: {
+                ...state.scene,
+                caseIndex,
+                currentCase,
+                currentCaseId: currentCase.id,
+                manifest: bundle.manifest,
+                meshes: bundle.meshes,
+                probePath: bundle.probePath,
+                volume: bundle.volume,
+                labelVolume: bundle.labelVolume,
+                views: bundle.views,
+                loadPhase: 'ready',
+                structures: bundle.manifest.structures,
+              },
+              cardiac: {
+                ...state.cardiac,
+                cardiacPhase: 0,
+                resolvedPhase: 0,
+                isPlaying: false,
+                phaseVolumes,
+              },
+              viewMatch: deriveViewMatch(nextProbePose, bundle.views),
+            }));
+
+            if (bundle.manifest.motionPhases?.length) {
+              queueMotionPrefetch(1);
+            }
+          } catch {
+            if (requestToken !== caseLoadRequestToken) {
+              return;
+            }
+
+            set((state) => ({
+              scene: {
+                ...state.scene,
+                currentCase: null,
+                currentCaseId: null,
+                manifest: null,
+                meshes: [],
+                probePath: null,
+                volume: null,
+                labelVolume: null,
+                views: VIEW_PRESETS,
+                loadPhase: 'error',
+                structures: [],
+              },
+              cardiac: {
+                ...state.cardiac,
+                cardiacPhase: 0,
+                resolvedPhase: 0,
+                isPlaying: false,
+                phaseVolumes: new Map(),
+              },
+              viewMatch: deriveViewMatch(selectProbePose(state), VIEW_PRESETS),
+            }));
+          }
+        },
+      },
+      viewMatch: initialViewMatch,
+      ui: {
+        depthMm: DEFAULT_DEPTH_MM,
+        labelsVisible: true,
+        selectedPanel: 'center',
+        setDepthMm: (depthMm) =>
+          set((state) => ({
+            ui: {
+              ...state.ui,
+              depthMm: clamp(depthMm, PSEUDO_TEE_LIMITS.depthMm.min, PSEUDO_TEE_LIMITS.depthMm.max),
+            },
+          })),
+        setSelectedPanel: (panel) =>
+          set((state) => ({
+            ui: {
+              ...state.ui,
+              selectedPanel: panel,
+            },
+          })),
+        toggleLabelsVisible: () =>
+          set((state) => ({
+            ui: {
+              ...state.ui,
+              labelsVisible: !state.ui.labelsVisible,
+            },
+          })),
+      },
+      cardiac: {
+        cardiacPhase: 0,
+        resolvedPhase: 0,
+        isPlaying: false,
+        cycleMs: DEFAULT_CYCLE_MS,
+        phaseVolumes: new Map(),
+        play: () => {
+          const state = get();
+          if (!state.scene.manifest?.motionPhases?.length || !state.scene.labelVolume) {
+            return;
+          }
+
+          queueMotionPrefetch(state.cardiac.cardiacPhase);
+          queueMotionPrefetch(state.cardiac.cardiacPhase + 1);
+
+          set((innerState) => ({
+            cardiac: {
+              ...innerState.cardiac,
+              isPlaying: true,
+            },
+          }));
+          startCardiacAnimation();
+        },
+        pause: () => {
+          stopCardiacAnimation();
+          set((state) => ({
+            cardiac: {
+              ...state.cardiac,
+              isPlaying: false,
+            },
+          }));
+        },
+        setPhase: (phase) => {
+          const nextPhase = normalizeCardiacPhase(phase);
+
+          set((state) => {
+            const nextPhaseVolumes = new Map(state.cardiac.phaseVolumes);
+            if (nextPhase === 0 && state.scene.labelVolume) {
+              nextPhaseVolumes.set(0, state.scene.labelVolume);
+            }
+
+            const hasRequestedVolume =
+              nextPhaseVolumes.has(nextPhase) || (nextPhase === 0 && state.scene.labelVolume !== null);
+
+            return {
+              cardiac: {
+                ...state.cardiac,
+                cardiacPhase: nextPhase,
+                resolvedPhase: hasRequestedVolume ? nextPhase : state.cardiac.resolvedPhase,
+                phaseVolumes: prunePhaseCache(nextPhaseVolumes, nextPhase),
+              },
+            };
           });
 
-          return {
-            probe: {
-              ...state.probe,
-              ...nextPose,
-            },
-            viewMatch: deriveViewMatch(nextPose, getActiveViewPresets(state)),
-          };
-        }),
-      snapToView: (preset) =>
-        set((state) => {
-          const nextPose = clampProbePose(preset.probePose);
-
-          return {
-            probe: {
-              ...state.probe,
-              ...nextPose,
-            },
-            viewMatch: deriveViewMatch(nextPose, getActiveViewPresets(state)),
-          };
-        }),
-    },
-    scene: {
-      caseIndex: [],
-      currentCase: null,
-      currentCaseId: null,
-      manifest: null,
-      meshes: [],
-      probePath: null,
-      volume: null,
-      labelVolume: null,
-      views: VIEW_PRESETS,
-      loadPhase: 'idle',
-      structures: [],
-      loadCaseIndex: async () => {
-        if (get().scene.caseIndex.length > 0) {
-          return;
-        }
-
-        const caseIndex = await loadCaseIndex();
-        set((state) => ({
-          scene: {
-            ...state.scene,
-            caseIndex,
-          },
-        }));
+          queueMotionPrefetch(nextPhase);
+          queueMotionPrefetch(nextPhase + 1);
+        },
       },
-      loadCase: async (caseId) => {
-        const requestToken = ++caseLoadRequestToken;
-
-        set((state) => ({
-          scene: {
-            ...state.scene,
-            currentCaseId: caseId,
-            loadPhase: 'loading',
-          },
-        }));
-
-        let caseIndex = get().scene.caseIndex;
-        if (caseIndex.length === 0) {
-          caseIndex = await loadCaseIndex();
-          if (requestToken !== caseLoadRequestToken) {
-            return;
-          }
-
-          set((state) => ({
-            scene: {
-              ...state.scene,
-              caseIndex,
-            },
-          }));
-        }
-
-        const currentCase = caseIndex.find((entry) => entry.id === caseId) ?? null;
-        if (!currentCase) {
-          set((state) => ({
-            scene: {
-              ...state.scene,
-              currentCase: null,
-              currentCaseId: null,
-              manifest: null,
-              meshes: [],
-              probePath: null,
-              volume: null,
-              labelVolume: null,
-              views: VIEW_PRESETS,
-              loadPhase: 'error',
-              structures: [],
-            },
-            viewMatch: deriveViewMatch(selectProbePose(state), VIEW_PRESETS),
-          }));
-          return;
-        }
-
-        try {
-          const bundle = await loadCaseBundle(currentCase);
-          if (requestToken !== caseLoadRequestToken) {
-            return;
-          }
-
-          const nextProbePose = selectProbePose(get());
-
-          set((state) => ({
-            scene: {
-              ...state.scene,
-              caseIndex,
-              currentCase,
-              currentCaseId: currentCase.id,
-              manifest: bundle.manifest,
-              meshes: bundle.meshes,
-              probePath: bundle.probePath,
-              volume: bundle.volume,
-              labelVolume: bundle.labelVolume,
-              views: bundle.views,
-              loadPhase: 'ready',
-              structures: bundle.manifest.structures,
-            },
-            viewMatch: deriveViewMatch(nextProbePose, bundle.views),
-          }));
-        } catch {
-          if (requestToken !== caseLoadRequestToken) {
-            return;
-          }
-
-          set((state) => ({
-            scene: {
-              ...state.scene,
-              currentCase: null,
-              currentCaseId: null,
-              manifest: null,
-              meshes: [],
-              probePath: null,
-              volume: null,
-              labelVolume: null,
-              views: VIEW_PRESETS,
-              loadPhase: 'error',
-              structures: [],
-            },
-            viewMatch: deriveViewMatch(selectProbePose(state), VIEW_PRESETS),
-          }));
-        }
-      },
-    },
-    viewMatch: initialViewMatch,
-    ui: {
-      depthMm: DEFAULT_DEPTH_MM,
-      labelsVisible: true,
-      selectedPanel: 'center',
-      setDepthMm: (depthMm) =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            depthMm: clamp(depthMm, PSEUDO_TEE_LIMITS.depthMm.min, PSEUDO_TEE_LIMITS.depthMm.max),
-          },
-        })),
-      setSelectedPanel: (panel) =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            selectedPanel: panel,
-          },
-        })),
-      toggleLabelsVisible: () =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            labelsVisible: !state.ui.labelsVisible,
-          },
-        })),
-    },
-  })),
+    };
+  }),
 );

@@ -49,6 +49,10 @@ export interface VolumeAssetRef {
   scalarType?: string;
 }
 
+export interface MotionPhaseAssetRef extends VolumeAssetRef {
+  phase: number;
+}
+
 export interface CaseManifest {
   schemaVersion: string;
   caseId: string;
@@ -67,6 +71,7 @@ export interface CaseManifest {
     heartRoiVti?: VolumeAssetRef;
     labelVti?: VolumeAssetRef;
   };
+  motionPhases?: MotionPhaseAssetRef[];
   metadata: {
     probePath: string;
     views: string;
@@ -138,6 +143,7 @@ export type ViewsAsset = ViewAsset[];
 export interface LoadedCaseBundle {
   entry: CaseIndexEntry;
   manifest: CaseManifest;
+  motionPhases: MotionPhaseAssetRef[];
   probePath: CenterlinePath;
   views: ViewPreset[];
   meshes: readonly vtkActor[];
