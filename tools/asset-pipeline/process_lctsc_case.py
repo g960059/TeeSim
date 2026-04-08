@@ -285,10 +285,31 @@ def run_totalsegmentator(ct_image: sitk.Image, output_dir: str) -> dict[str, sit
         masks['lung'] = (lung_mask, 6)
         print(f"    Merged lungs (label 6)")
 
-    # Try heartchambers_highres (requires separate license)
-    # Skip entirely for now — academic license must be obtained first
-    # See: https://backend.totalsegmentator.com/license-academic/
-    print("  Skipping 'heartchambers_highres' (requires license). Using 'total' task labels only.")
+    # Run heartchambers_highres (academic license activated)
+    print("  Running 'heartchambers_highres' task...")
+    tmp_hc_dir = os.path.join(output_dir, '_tmp_heartchambers')
+    os.makedirs(tmp_hc_dir, exist_ok=True)
+    try:
+        totalsegmentator(tmp_ct, tmp_hc_dir, task='heartchambers_highres', fast=False, device='cpu', verbose=True)
+        HC_MAP = {
+            'heart_ventricle_left': ('heart_ventricle_left.nii.gz', 11),
+            'heart_ventricle_right': ('heart_ventricle_right.nii.gz', 12),
+            'heart_atrium_left': ('heart_atrium_left.nii.gz', 13),
+            'heart_atrium_right': ('heart_atrium_right.nii.gz', 14),
+            'heart_myocardium': ('heart_myocardium.nii.gz', 15),
+            'hc_aorta': ('aorta.nii.gz', 16),
+            'hc_pulmonary_artery': ('pulmonary_artery.nii.gz', 17),
+        }
+        for name, (filename, label_id) in HC_MAP.items():
+            fpath = os.path.join(tmp_hc_dir, filename)
+            if os.path.exists(fpath):
+                masks[name] = (sitk.ReadImage(fpath), label_id)
+                print(f"    Loaded {name} (label {label_id})")
+            else:
+                print(f"    Missing {filename}")
+    except Exception as e:
+        print(f"  heartchambers_highres failed: {e}")
+        print("  Continuing with 'total' task labels only.")
 
     # Cleanup temp CT file (keep segmentation dir for debugging)
     try:
