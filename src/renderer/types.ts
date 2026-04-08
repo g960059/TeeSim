@@ -17,9 +17,6 @@ export interface PseudoTeeAppearance {
   nearFieldMm?: number;
   outputSpacingMm?: number;
   sectorAngleDeg?: number;
-  slabThicknessMm?: number;
-  windowHigh?: number;
-  windowLow?: number;
 }
 
 export interface Scene3DPaneProps {

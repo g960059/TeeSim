@@ -8,6 +8,7 @@ import vtkImageReslice from '@kitware/vtk.js/Imaging/Core/ImageReslice.js';
 import vtkImageMapper from '@kitware/vtk.js/Rendering/Core/ImageMapper.js';
 import vtkImageSlice from '@kitware/vtk.js/Rendering/Core/ImageSlice.js';
 import type { ImagingPlane } from '../core';
+import { renderEchoSector } from './echo-appearance';
 import { getLabelColor, LABEL_OVERLAY_ALPHA } from './label-colors';
 import type { PseudoTeeAppearance, PseudoTeePaneHandle, PseudoTeePaneProps } from './types';
 import {
@@ -52,66 +53,21 @@ const DEFAULT_APPEARANCE: Required<PseudoTeeAppearance> = {
   nearFieldMm: 4,
   outputSpacingMm: 0.6,
   sectorAngleDeg: 90,
-  slabThicknessMm: 4,
-  // Non-contrast CT: air ~-1000, lung ~-700, fat ~-100, blood ~30-50, myocardium ~50-80, bone >300
-  // Window: -200 to 300 (500 HU) shows soft tissue + some lung/bone context
-  // Inverted: high HU -> dark (like echo: blood=dark, tissue=bright)
-  windowHigh: 300,
-  windowLow: -200,
 };
 
-const MIN_LABEL_SLAB_THICKNESS_MM = 3.2;
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
-
-const clampToByte = (value: number): number => Math.round(clamp(value, 0, 255));
-
-const remapToByte = (value: number, low: number, high: number): number => {
-  const normalized = (value - low) / Math.max(high - low, 1);
-  return clamp(normalized * 255, 0, 255);
-};
-
-const smoothstep = (edge0: number, edge1: number, value: number): number => {
-  if (edge0 === edge1) {
-    return value < edge0 ? 0 : 1;
-  }
-
-  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
-  return t * t * (3 - 2 * t);
-};
-
-const applySectorMask = (
-  source: VtkImageData,
-  runtime: OutputRuntime,
+const renderLabelOverlay = (
+  labelData: ArrayLike<number>,
+  runtime: OverlayRuntime,
   appearance: Required<PseudoTeeAppearance>,
-  options?: {
-    labelSource?: VtkImageData | null;
-    labelsVisible?: boolean;
-    overlayRuntime?: OverlayRuntime | null;
-  },
 ): void => {
-  const sourceScalars = source.getPointData().getScalars();
-  if (!sourceScalars) {
-    throw new Error('Pseudo-TEE reslice output is missing scalar data.');
-  }
-
-  const sourceValues = sourceScalars.getData();
-  const labelScalars =
-    options?.labelsVisible && options.labelSource ? options.labelSource.getPointData().getScalars() : null;
-  const labelValues = labelScalars?.getData() ?? null;
-  const overlayRuntime =
-    options?.labelsVisible && options.overlayRuntime ? options.overlayRuntime : null;
-  const overlayValues = overlayRuntime?.values ?? null;
+  const overlayValues = runtime.values;
   const overlayAlpha = Math.round(LABEL_OVERLAY_ALPHA * 255);
   const halfSectorRad = (appearance.sectorAngleDeg * Math.PI) / 360;
   const centerX = runtime.widthPx / 2;
+
+  overlayValues.fill(0);
+
   let flatIndex = 0;
-
-  if (overlayValues) {
-    overlayValues.fill(0);
-  }
-
   for (let row = 0; row < runtime.heightPx; row += 1) {
     const axialDepthMm = (row + 0.5) * runtime.spacingMm;
 
@@ -126,33 +82,10 @@ const applySectorMask = (
         angularOffset <= halfSectorRad;
 
       if (!withinSector) {
-        runtime.values[flatIndex] = 0;
         continue;
       }
 
-      const rawValue = Number(sourceValues[flatIndex]);
-      const mapped = remapToByte(rawValue, appearance.windowLow, appearance.windowHigh);
-      const depthNorm = clamp(axialDepthMm / Math.max(appearance.depthMm, 1), 0, 1);
-      const angleNorm = clamp(angularOffset / Math.max(halfSectorRad, 1e-4), 0, 1);
-      const radialNorm = clamp(radiusMm / Math.max(appearance.depthMm, 1), 0, 1);
-      // Gentler attenuation: -0.4 (was -1.18) preserves far-field anatomy visibility
-      const depthAttenuation = 0.85 * Math.exp(-0.4 * depthNorm) + 0.15;
-      const edgeFeather = 1 - smoothstep(0.86, 1, Math.max(angleNorm, radialNorm));
-      const nearFieldGate = smoothstep(
-        appearance.nearFieldMm,
-        appearance.nearFieldMm + 7,
-        axialDepthMm,
-      );
-
-      runtime.values[flatIndex] = clampToByte(
-        mapped * depthAttenuation * edgeFeather * nearFieldGate,
-      );
-
-      if (!overlayValues || !labelValues) {
-        continue;
-      }
-
-      const labelColor = getLabelColor(Number(labelValues[flatIndex]));
+      const labelColor = getLabelColor(Number(labelData[flatIndex]));
       if (!labelColor) {
         continue;
       }
@@ -167,10 +100,6 @@ const applySectorMask = (
 
   runtime.scalars.dataChange();
   runtime.image.modified();
-  if (overlayRuntime) {
-    overlayRuntime.scalars.dataChange();
-    overlayRuntime.image.modified();
-  }
 };
 
 export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>(function PseudoTeePane(
@@ -178,6 +107,7 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
   ref,
 ) {
   const [isLoading, setIsLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const renderWindowRef = useRef<ReturnType<typeof createRenderWindow> | null>(null);
   const mapperRef = useRef<ReturnType<typeof vtkImageMapper.newInstance> | null>(null);
@@ -185,7 +115,6 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
   const labelOverlayMapperRef = useRef<ReturnType<typeof vtkImageMapper.newInstance> | null>(null);
   const labelOverlaySliceRef = useRef<ReturnType<typeof vtkImageSlice.newInstance> | null>(null);
   const resliceRef = useRef<ReturnType<typeof vtkImageReslice.newInstance> | null>(null);
-  const labelResliceRef = useRef<ReturnType<typeof vtkImageReslice.newInstance> | null>(null);
   const outputRuntimeRef = useRef<OutputRuntime | null>(null);
   const labelOverlayRuntimeRef = useRef<OverlayRuntime | null>(null);
   const latestStateRef = useRef<PaneState>({
@@ -299,10 +228,9 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     const renderWindow = renderWindowRef.current;
     const reslice = resliceRef.current;
     const imageSlice = imageSliceRef.current;
-    const labelReslice = labelResliceRef.current;
     const labelOverlaySlice = labelOverlaySliceRef.current;
     const container = containerRef.current;
-    if (!renderWindow || !reslice || !imageSlice || !labelReslice || !labelOverlaySlice) {
+    if (!renderWindow || !reslice || !imageSlice || !labelOverlaySlice) {
       return;
     }
 
@@ -318,11 +246,13 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     runtime.scalars.dataChange();
     runtime.image.modified();
     labelOverlaySlice.setVisibility(false);
+    setStatusMessage(null);
 
-    const { imagingPlane: nextImagingPlane, volume: nextVolume } = latestStateRef.current;
-    if (!nextVolume || !nextImagingPlane) {
+    const { imagingPlane: nextImagingPlane, labelVolume: nextLabelVolume } = latestStateRef.current;
+    if (!nextImagingPlane) {
       imageSlice.setVisibility(false);
       labelOverlaySlice.setVisibility(false);
+      setStatusMessage(null);
       updateLoading(true);
       renderWindow.getRenderWindow().render();
       if (container) {
@@ -331,58 +261,57 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
       return;
     }
 
-    const slabSpacingMm = Math.min(...nextVolume.getSpacing());
-    const slabSlices = Math.max(
-      1,
-      Math.round(resolvedAppearance.slabThicknessMm / Math.max(slabSpacingMm, 1e-3)),
-    );
-    const labelSlabSlices = Math.max(
-      slabSlices,
-      Math.round(MIN_LABEL_SLAB_THICKNESS_MM / Math.max(slabSpacingMm, 1e-3)),
-    );
-    const overlayActive = Boolean(
-      latestStateRef.current.labelsVisible && latestStateRef.current.labelVolume,
-    );
+    if (!nextLabelVolume) {
+      imageSlice.setVisibility(false);
+      labelOverlaySlice.setVisibility(false);
+      setStatusMessage('Label volume required for echo rendering');
+      updateLoading(false);
+      renderWindow.getRenderWindow().render();
+      if (container) {
+        setCanvasRenderState(container, 'empty');
+      }
+      return;
+    }
+
+    const overlayActive = Boolean(latestStateRef.current.labelsVisible);
     const overlayRuntime = overlayActive
       ? ensureLabelOverlayRuntime(widthPx, heightPx, runtime.spacingMm)
       : null;
 
-    reslice.setInputData(nextVolume);
+    reslice.setInputData(nextLabelVolume);
     reslice.setResliceAxes(buildResliceAxes(nextImagingPlane));
     reslice.setOutputSpacing([runtime.spacingMm, runtime.spacingMm, 1]);
     reslice.setOutputOrigin([-(runtime.widthPx * runtime.spacingMm) / 2, 0, 0]);
     reslice.setOutputExtent([0, runtime.widthPx - 1, 0, runtime.heightPx - 1, 0, 0]);
-    reslice.setInterpolationMode(InterpolationMode.LINEAR);
-    reslice.setSlabNumberOfSlices(slabSlices);
+    reslice.setInterpolationMode(InterpolationMode.NEAREST);
+    reslice.setSlabNumberOfSlices(1);
     reslice.update();
 
-    const reslicedImage = reslice.getOutputData() as VtkImageData | null;
-    if (!reslicedImage) {
-      throw new Error('vtkImageReslice returned no pseudo-TEE output.');
+    const reslicedLabels = reslice.getOutputData() as VtkImageData | null;
+    if (!reslicedLabels) {
+      throw new Error('vtkImageReslice returned no pseudo-TEE label output.');
     }
 
-    let reslicedLabels: VtkImageData | null = null;
-    if (overlayActive) {
-      labelReslice.setInputData(latestStateRef.current.labelVolume!);
-      labelReslice.setResliceAxes(buildResliceAxes(nextImagingPlane));
-      labelReslice.setOutputSpacing([runtime.spacingMm, runtime.spacingMm, 1]);
-      labelReslice.setOutputOrigin([-(runtime.widthPx * runtime.spacingMm) / 2, 0, 0]);
-      labelReslice.setOutputExtent([0, runtime.widthPx - 1, 0, runtime.heightPx - 1, 0, 0]);
-      labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
-      labelReslice.setSlabNumberOfSlices(labelSlabSlices);
-      labelReslice.update();
-
-      reslicedLabels = labelReslice.getOutputData() as VtkImageData | null;
-      if (!reslicedLabels) {
-        throw new Error('vtkImageReslice returned no pseudo-TEE label output.');
-      }
+    const labelScalars = reslicedLabels.getPointData().getScalars();
+    if (!labelScalars) {
+      throw new Error('Pseudo-TEE label reslice output is missing scalar data.');
     }
 
-    applySectorMask(reslicedImage, runtime, resolvedAppearance, {
-      labelSource: reslicedLabels,
-      labelsVisible: overlayActive,
-      overlayRuntime,
+    const labelValues = labelScalars.getData();
+    renderEchoSector(labelValues, runtime.values, {
+      depthMm: resolvedAppearance.depthMm,
+      heightPx: runtime.heightPx,
+      nearFieldMm: resolvedAppearance.nearFieldMm,
+      sectorAngleDeg: resolvedAppearance.sectorAngleDeg,
+      spacingMm: runtime.spacingMm,
+      widthPx: runtime.widthPx,
     });
+    runtime.scalars.dataChange();
+    runtime.image.modified();
+
+    if (overlayRuntime) {
+      renderLabelOverlay(labelValues, overlayRuntime, resolvedAppearance);
+    }
 
     imageSlice.setVisibility(true);
     labelOverlaySlice.setVisibility(Boolean(overlayActive && overlayRuntime));
@@ -441,7 +370,6 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     const reslice = vtkImageReslice.newInstance();
     const labelOverlayMapper = vtkImageMapper.newInstance();
     const labelOverlaySlice = vtkImageSlice.newInstance();
-    const labelReslice = vtkImageReslice.newInstance();
 
     setCanvasTestId(container, 'pseudo-tee-canvas');
     setCanvasRenderState(container, 'loading');
@@ -450,11 +378,6 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     reslice.setBackgroundColor([0, 0, 0, 0]);
     reslice.setSlabMode(SlabMode.MEAN);
     reslice.setSlabSliceSpacingFraction(1);
-    labelReslice.setOutputDimensionality(2);
-    labelReslice.setBackgroundColor([0, 0, 0, 0]);
-    labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
-    labelReslice.setSlabMode(SlabMode.MAX);
-    labelReslice.setSlabSliceSpacingFraction(1);
 
     mapper.setKSlice(0);
     imageSlice.setMapper(mapper);
@@ -476,7 +399,6 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     resliceRef.current = reslice;
     labelOverlayMapperRef.current = labelOverlayMapper;
     labelOverlaySliceRef.current = labelOverlaySlice;
-    labelResliceRef.current = labelReslice;
 
     renderWindow.resize();
     flush();
@@ -487,7 +409,6 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
       labelOverlayMapperRef.current = null;
       labelOverlayRuntimeRef.current = null;
       labelOverlaySliceRef.current = null;
-      labelResliceRef.current = null;
       outputRuntimeRef.current = null;
       resliceRef.current = null;
       disposePipeline(renderWindow);
@@ -527,7 +448,7 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
           top: 12,
         }}
       >
-        CT-derived anatomical slice
+        Label-driven echo appearance
       </div>
       {isLoading ? (
         <div
@@ -542,6 +463,23 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
           }}
         >
           Loading...
+        </div>
+      ) : null}
+      {statusMessage ? (
+        <div
+          style={{
+            alignItems: 'center',
+            color: '#d6e7ee',
+            display: 'flex',
+            inset: 0,
+            justifyContent: 'center',
+            padding: '0 24px',
+            pointerEvents: 'none',
+            position: 'absolute',
+            textAlign: 'center',
+          }}
+        >
+          {statusMessage}
         </div>
       ) : null}
     </div>

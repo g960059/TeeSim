@@ -115,7 +115,7 @@ export default function App() {
         <span className="status-pill">Case {currentCase?.title ?? 'not loaded'}</span>
         <span className="status-pill">Bundle {manifest?.bundleVersion ?? currentCase?.bundleVersion ?? 'n/a'}</span>
         <span className="status-pill">Probe constrained to esophageal centerline</span>
-        <span className="status-pill">CT-derived anatomical slice, not ultrasound</span>
+        <span className="status-pill">Label-driven echo appearance</span>
         {volume ? (
           <span className="status-pill">Public `heart_roi.vti` loaded</span>
         ) : null}
@@ -139,14 +139,14 @@ export default function App() {
           <div className="pane-stack">
             <div className="pane-header">
               <p className="pane-kicker">Pseudo-TEE</p>
-              <h2 className="pane-title">CT-derived anatomical slice</h2>
+              <h2 className="pane-title">Label-driven echo appearance</h2>
             </div>
 
             <MeasuredRendererSurface className="render-surface render-surface-left">
               {({ height, width }) => (
                 <ErrorBoundary label="Pseudo-TEE">
                   <PseudoTeePane
-                    appearance={{ depthMm, slabThicknessMm: 4 }}
+                    appearance={{ depthMm }}
                     height={height}
                     labelVolume={labelVolume}
                     labelsVisible={labelsVisible}
@@ -158,10 +158,10 @@ export default function App() {
               )}
             </MeasuredRendererSurface>
 
-            {labelsVisible && !volume ? (
+            {!labelVolume ? (
               <p className="pane-note">
-                This case bundle does not expose a `heart_roi.vti`, so the pseudo-TEE and oblique panes
-                remain unavailable.
+                This case bundle does not expose a `heart_labels.vti`, so the pseudo-TEE pane remains
+                unavailable.
               </p>
             ) : null}
           </div>
