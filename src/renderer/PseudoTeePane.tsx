@@ -60,6 +60,8 @@ const DEFAULT_APPEARANCE: Required<PseudoTeeAppearance> = {
   windowLow: -200,
 };
 
+const MIN_LABEL_SLAB_THICKNESS_MM = 3.2;
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
@@ -334,6 +336,10 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
       1,
       Math.round(resolvedAppearance.slabThicknessMm / Math.max(slabSpacingMm, 1e-3)),
     );
+    const labelSlabSlices = Math.max(
+      slabSlices,
+      Math.round(MIN_LABEL_SLAB_THICKNESS_MM / Math.max(slabSpacingMm, 1e-3)),
+    );
     const overlayActive = Boolean(
       latestStateRef.current.labelsVisible && latestStateRef.current.labelVolume,
     );
@@ -363,7 +369,7 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
       labelReslice.setOutputOrigin([-(runtime.widthPx * runtime.spacingMm) / 2, 0, 0]);
       labelReslice.setOutputExtent([0, runtime.widthPx - 1, 0, runtime.heightPx - 1, 0, 0]);
       labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
-      labelReslice.setSlabNumberOfSlices(1);
+      labelReslice.setSlabNumberOfSlices(labelSlabSlices);
       labelReslice.update();
 
       reslicedLabels = labelReslice.getOutputData() as VtkImageData | null;
@@ -447,7 +453,7 @@ export const PseudoTeePane = forwardRef<PseudoTeePaneHandle, PseudoTeePaneProps>
     labelReslice.setOutputDimensionality(2);
     labelReslice.setBackgroundColor([0, 0, 0, 0]);
     labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
-    labelReslice.setSlabMode(SlabMode.MIN);
+    labelReslice.setSlabMode(SlabMode.MAX);
     labelReslice.setSlabSliceSpacingFraction(1);
 
     mapper.setKSlice(0);

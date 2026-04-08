@@ -280,7 +280,7 @@ Contingency recovered by cuts: ~4 weeks (motion, monorepo, PWA, visual regressio
 **Known Simplifications (disclosed in UI):**
 - Probe constrained to centerline (no wall apposition or radial offset)
 - Pseudo-TEE is CT-derived cross-section, not simulated ultrasound
-- No valve leaflets, chordae, or papillary muscles
+- No native valve tissue, chordae, or papillary muscles in the source CT; v0.2 supplements this with derived parametric leaflet assets
 
 ---
 

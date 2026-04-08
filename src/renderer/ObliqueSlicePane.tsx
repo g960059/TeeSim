@@ -45,6 +45,8 @@ type OverlayRuntime = {
   widthPx: number;
 };
 
+const MIN_LABEL_SLAB_THICKNESS_MM = 3.2;
+
 const createCtTransferFunctions = (): {
   color: vtkColorTransferFunction;
   opacity: vtkPiecewiseFunction;
@@ -259,6 +261,11 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       imageSlice.setVisibility(true);
       if (overlayActive) {
         const overlayRuntime = ensureOverlayRuntime(widthPx, heightPx, outputSpacingMm);
+        const labelSpacingMm = Math.min(...latestStateRef.current.labelVolume!.getSpacing());
+        const labelSlabSlices = Math.max(
+          1,
+          Math.round(MIN_LABEL_SLAB_THICKNESS_MM / Math.max(labelSpacingMm, 1e-3)),
+        );
 
         labelReslice.setInputData(latestStateRef.current.labelVolume!);
         labelReslice.setResliceAxes(buildResliceAxes(latestStateRef.current.imagingPlane));
@@ -266,7 +273,7 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
         labelReslice.setOutputOrigin([-(widthPx * outputSpacingMm) / 2, 0, 0]);
         labelReslice.setOutputExtent([0, widthPx - 1, 0, heightPx - 1, 0, 0]);
         labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
-        labelReslice.setSlabNumberOfSlices(1);
+        labelReslice.setSlabNumberOfSlices(labelSlabSlices);
         labelReslice.update();
 
         const labelOutput = labelReslice.getOutputData() as VtkImageData | null;
@@ -338,7 +345,7 @@ export const ObliqueSlicePane = forwardRef<ObliqueSlicePaneHandle, ObliqueSliceP
       labelReslice.setOutputDimensionality(2);
       labelReslice.setBackgroundColor([0, 0, 0, 0]);
       labelReslice.setInterpolationMode(InterpolationMode.NEAREST);
-      labelReslice.setSlabMode(SlabMode.MIN);
+      labelReslice.setSlabMode(SlabMode.MAX);
       labelReslice.setSlabNumberOfSlices(1);
 
       mapper.setKSlice(0);

@@ -18,7 +18,7 @@ Key findings:
 
 - **Thoracic anatomy** is well-served by open-licensed data: Open Anatomy Project thorax atlas, HRA 3D reference organs, Visible Human / SIO, and TotalSegmentator CT dataset (CC BY 4.0, 1228 cases) together provide a strong foundation for probe corridor, chest geometry, and canonical anatomy.
 - **Cardiac detail** is harder: MM-WHS, MITEA, EchoNet-Dynamic, and MVSeg2023 have non-commercial or no-redistribution terms, so they stay in the internal research lane.
-- **TEE-specific appearance** (ultrasound texture, valve leaflets, chordae) is not yet well-covered by bundle-safe public data. Product-grade valve realism will require licensed or self-collected 3D/4D TEE data.
+- **TEE-specific appearance** (ultrasound texture, chordae, high-fidelity leaflet motion) is not yet well-covered by bundle-safe public data. The public bundle can ship derived parametric valve leaflets, but product-grade valve realism will still require licensed or self-collected 3D/4D TEE data.
 
 ## Data Architecture Decision
 

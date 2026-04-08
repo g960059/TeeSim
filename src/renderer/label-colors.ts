@@ -20,6 +20,10 @@ export const LABEL_COLOR_TABLE: Record<number, LabelColor> = {
   15: [180, 140, 100],  // myocardium → tan/brown
   16: [255, 200, 0],    // aorta (highres) → bright gold
   17: [160, 60, 200],   // pulmonary artery (highres) → violet
+  20: [255, 255, 200],  // mitral valve → bright white-yellow
+  21: [255, 255, 180],  // aortic valve → bright white-yellow
+  22: [255, 255, 200],  // tricuspid valve → bright white-yellow
+  23: [255, 255, 180],  // pulmonic valve → bright white-yellow
 };
 
 const clampByte = (value: number): number => Math.round(Math.min(255, Math.max(0, value)));

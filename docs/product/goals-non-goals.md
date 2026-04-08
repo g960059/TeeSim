@@ -18,7 +18,7 @@
 - Pathology cases (LV dysfunction, mitral regurgitation, aortic stenosis)
 - Trainee scoring and progress tracking
 - DICOM route — ingest real 3D/4D TEE DICOM via Orthanc + DICOMweb
-- Valve-level detail (leaflets, annuli, chordae, papillary muscles)
+- Dynamic/pathology-grade valve detail (opening/closing leaflets, annuli, chordae, papillary muscles)
 - LAA/PV/coronary anatomy for LAAO and AF ablation workflows
 - Mobile-optimized UI
 
