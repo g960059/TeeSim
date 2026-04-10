@@ -22,6 +22,15 @@ type SceneState = {
 
 const MIN_CAMERA_DISTANCE = 120;
 const MAX_CAMERA_DISTANCE = 1200;
+const MESH_PALETTE: Array<{ color: [number, number, number]; opacity?: number }> = [
+  { color: [0.85, 0.25, 0.25] },
+  { color: [0.95, 0.6, 0.6] },
+  { color: [0.6, 0.15, 0.15] },
+  { color: [0.3, 0.5, 0.85] },
+  { color: [0.7, 0.7, 0.75], opacity: 0.3 },
+  { color: [0.7, 0.7, 0.75], opacity: 0.3 },
+];
+const FALLBACK_MESH_STYLE = { color: [0.55, 0.55, 0.6] as [number, number, number], opacity: 1 };
 
 const normalize = (vector: Vec3): Vec3 => {
   const length = Math.hypot(vector[0], vector[1], vector[2]);
@@ -112,7 +121,16 @@ export const Scene3DPane = forwardRef<Scene3DPaneHandle, Scene3DPaneProps>(funct
     }
 
     currentMeshes.forEach((actor) => renderer.removeActor(actor));
-    resolvedMeshes.forEach((actor) => {
+    resolvedMeshes.forEach((actor, index) => {
+      const prop = actor.getProperty();
+      const style = MESH_PALETTE[index] ?? FALLBACK_MESH_STYLE;
+
+      prop.setColor(...style.color);
+      prop.setOpacity(style.opacity ?? 1);
+      prop.setAmbient(0.3);
+      prop.setDiffuse(0.7);
+      prop.setSpecular(0.2);
+      prop.setSpecularPower(20);
       actor.setVisibility(true);
       renderer.addActor(actor);
     });

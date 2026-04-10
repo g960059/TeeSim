@@ -160,7 +160,7 @@ export default function App() {
                     appearance={{ depthMm }}
                     height={height}
                     labelVolume={activeLabelVolume}
-                    labelsVisible={labelsVisible}
+                    labelsVisible={false}
                     ref={pseudoTeePaneRef}
                     volume={volume}
                     width={width}

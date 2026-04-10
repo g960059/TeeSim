@@ -195,6 +195,65 @@ const normalizeCardiacPhase = (phase: number): number => {
   return wrapped < 0 ? wrapped + CARDIAC_PHASE_COUNT : wrapped;
 };
 
+const getCardiacPhaseDistance = (a: number, b: number): number => {
+  const normalizedA = normalizeCardiacPhase(a);
+  const normalizedB = normalizeCardiacPhase(b);
+  const absoluteDistance = Math.abs(normalizedA - normalizedB);
+  return Math.min(absoluteDistance, CARDIAC_PHASE_COUNT - absoluteDistance);
+};
+
+const resolveNearestLoadedPhase = (
+  currentPhase: number,
+  phaseVolumes: ReadonlyMap<number, VtkImageData>,
+  preferredPhase: number | null,
+): number | null => {
+  const normalizedCurrentPhase = normalizeCardiacPhase(currentPhase);
+  const normalizedPreferredPhase =
+    preferredPhase === null ? null : normalizeCardiacPhase(preferredPhase);
+  let bestPhase: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const availablePhase of phaseVolumes.keys()) {
+    const candidatePhase = normalizeCardiacPhase(availablePhase);
+    const candidateDistance = getCardiacPhaseDistance(normalizedCurrentPhase, candidatePhase);
+    if (candidateDistance < bestDistance) {
+      bestPhase = candidatePhase;
+      bestDistance = candidateDistance;
+      continue;
+    }
+
+    if (candidateDistance > bestDistance || bestPhase === null) {
+      continue;
+    }
+
+    const candidateMatchesCurrent = candidatePhase === normalizedCurrentPhase;
+    const bestMatchesCurrent = bestPhase === normalizedCurrentPhase;
+    if (candidateMatchesCurrent !== bestMatchesCurrent) {
+      if (candidateMatchesCurrent) {
+        bestPhase = candidatePhase;
+      }
+      continue;
+    }
+
+    if (normalizedPreferredPhase !== null) {
+      const candidateMatchesPreferred = candidatePhase === normalizedPreferredPhase;
+      const bestMatchesPreferred = bestPhase === normalizedPreferredPhase;
+      if (candidateMatchesPreferred !== bestMatchesPreferred) {
+        if (candidateMatchesPreferred) {
+          bestPhase = candidatePhase;
+        }
+        continue;
+      }
+    }
+
+    if (candidatePhase < bestPhase) {
+      bestPhase = candidatePhase;
+    }
+  }
+
+  return bestPhase;
+};
+
 const getAdjacentCardiacPhases = (phase: number): readonly [number, number, number] => {
   const current = normalizeCardiacPhase(phase);
   return [
@@ -292,13 +351,24 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
 
       if (normalizedPhase === 0 && state.scene.labelVolume) {
         set((innerState) => ({
-          cardiac: {
-            ...innerState.cardiac,
-            phaseVolumes: prunePhaseCache(
+          cardiac: (() => {
+            const phaseVolumes = prunePhaseCache(
               new Map(innerState.cardiac.phaseVolumes).set(0, state.scene.labelVolume!),
               innerState.cardiac.cardiacPhase,
-            ),
-          },
+            );
+            const resolvedPhase =
+              resolveNearestLoadedPhase(
+                innerState.cardiac.cardiacPhase,
+                phaseVolumes,
+                innerState.cardiac.resolvedPhase,
+              ) ?? innerState.cardiac.resolvedPhase;
+
+            return {
+              ...innerState.cardiac,
+              phaseVolumes,
+              resolvedPhase,
+            };
+          })(),
         }));
         return state.scene.labelVolume;
       }
@@ -334,15 +404,22 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
 
         const nextPhaseVolumes = new Map(innerState.cardiac.phaseVolumes);
         nextPhaseVolumes.set(normalizedPhase, volume);
+        const phaseVolumes = prunePhaseCache(
+          nextPhaseVolumes,
+          innerState.cardiac.cardiacPhase,
+        );
+        const resolvedPhase =
+          resolveNearestLoadedPhase(
+            innerState.cardiac.cardiacPhase,
+            phaseVolumes,
+            innerState.cardiac.resolvedPhase,
+          ) ?? innerState.cardiac.resolvedPhase;
 
         return {
           cardiac: {
             ...innerState.cardiac,
-            phaseVolumes: prunePhaseCache(nextPhaseVolumes, innerState.cardiac.cardiacPhase),
-            resolvedPhase:
-              innerState.cardiac.cardiacPhase === normalizedPhase
-                ? normalizedPhase
-                : innerState.cardiac.resolvedPhase,
+            phaseVolumes,
+            resolvedPhase,
           },
         };
       });
@@ -649,15 +726,17 @@ export const useTeeSimStore = create<TeeSimStoreState>()(
               nextPhaseVolumes.set(0, state.scene.labelVolume);
             }
 
-            const hasRequestedVolume =
-              nextPhaseVolumes.has(nextPhase) || (nextPhase === 0 && state.scene.labelVolume !== null);
+            const phaseVolumes = prunePhaseCache(nextPhaseVolumes, nextPhase);
+            const resolvedPhase =
+              resolveNearestLoadedPhase(nextPhase, phaseVolumes, state.cardiac.resolvedPhase) ??
+              state.cardiac.resolvedPhase;
 
             return {
               cardiac: {
                 ...state.cardiac,
                 cardiacPhase: nextPhase,
-                resolvedPhase: hasRequestedVolume ? nextPhase : state.cardiac.resolvedPhase,
-                phaseVolumes: prunePhaseCache(nextPhaseVolumes, nextPhase),
+                resolvedPhase,
+                phaseVolumes,
               },
             };
           });

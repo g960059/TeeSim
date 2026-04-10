@@ -55,7 +55,31 @@ LABEL_NAMES = {
     PA_LABEL: "pa",
 }
 
-SYSTOLIC_CURVE = [0.0, 0.0, 0.35, 0.68, 0.9, 1.0, 1.0, 0.82, 0.55, 0.28, 0.08, 0.0]
+def build_systolic_curve() -> list[float]:
+    peak_phase = 5
+    final_phase = PHASE_COUNT - 1
+    exponent = 1.5
+    curve: list[float] = []
+
+    for phase_index in range(PHASE_COUNT):
+        if phase_index <= 0:
+            curve.append(0.0)
+            continue
+
+        if phase_index <= peak_phase:
+            progress = max(0.0, min(1.0, phase_index / peak_phase))
+            curve.append(math.sin(progress * math.pi * 0.5) ** exponent)
+            continue
+
+        relaxation = max(0.0, min(1.0, (phase_index - peak_phase) / (final_phase - peak_phase)))
+        curve.append(math.cos(relaxation * math.pi * 0.5) ** exponent)
+
+    curve[peak_phase] = 1.0
+    curve[final_phase] = 0.0
+    return curve
+
+
+SYSTOLIC_CURVE = build_systolic_curve()
 ATRIAL_CURVE = [0.0, 0.12, 0.35, 0.65, 0.88, 1.0, 1.0, 0.82, 0.52, 0.24, 0.08, 0.0]
 EJECTION_CURVE = [0.0, 0.0, 0.42, 1.0, 0.58, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 

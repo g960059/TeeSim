@@ -151,4 +151,13 @@ describe('public LCTSC case assets', () => {
       expect(fs.existsSync(path.join(publicCaseRoot, phase.path))).toBe(true);
     }
   });
+
+  it('keeps phase 00 at ED baseline and phase 01 visibly deformed', () => {
+    const baseline = fs.readFileSync(path.join(publicCaseRoot, 'heart_labels.vti'));
+    const phase00 = fs.readFileSync(path.join(publicCaseRoot, 'phases/phase_00.vti'));
+    const phase01 = fs.readFileSync(path.join(publicCaseRoot, 'phases/phase_01.vti'));
+
+    expect(phase00.equals(baseline)).toBe(true);
+    expect(phase01.equals(baseline)).toBe(false);
+  });
 });

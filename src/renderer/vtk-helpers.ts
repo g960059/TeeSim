@@ -12,6 +12,7 @@ import vtkCylinderSource from '@kitware/vtk.js/Filters/Sources/CylinderSource.js
 import vtkGLTFImporter from '@kitware/vtk.js/IO/Geometry/GLTFImporter.js';
 import vtkInteractorStyleTrackballCamera from '@kitware/vtk.js/Interaction/Style/InteractorStyleTrackballCamera.js';
 import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor.js';
+import vtkLight from '@kitware/vtk.js/Rendering/Core/Light.js';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper.js';
 import vtkGenericRenderWindow from '@kitware/vtk.js/Rendering/Misc/GenericRenderWindow.js';
 import type { RGBColor } from '@kitware/vtk.js/types';
@@ -43,6 +44,12 @@ export const createRenderWindow = (
   // Must call setContainer explicitly — newInstance stores it in model
   // but does NOT attach the OpenGL canvas to the DOM.
   generic.setContainer(container);
+  const renderer = generic.getRenderer();
+  const light = vtkLight.newInstance();
+  light.setPosition(1, 1, 1);
+  light.setIntensity(1.0);
+  light.setLightTypeToSceneLight();
+  renderer.addLight(light);
   generic.getInteractor().setInteractorStyle(vtkInteractorStyleTrackballCamera.newInstance());
   generic.resize();
   return generic;
